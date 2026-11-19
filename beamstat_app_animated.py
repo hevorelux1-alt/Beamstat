@@ -2,6 +2,9 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import base64
+import csv
+import io
+from matplotlib.backends.backend_pdf import PdfPages
 from pathlib import Path
 from PIL import Image
 
@@ -58,7 +61,7 @@ div.stButton>button:hover{color:var(--blue)!important;border-bottom:2px solid va
 .hero{display:grid;grid-template-columns:1.02fr 1fr;min-height:420px;align-items:center;gap:1rem;margin-bottom:1.3rem}
 .hero-copy{padding:30px 0 30px 12px;z-index:2;animation:heroFadeUp 1.05s ease-out both}
 .eyebrow{font-style:italic;color:#064ca8;font-size:15px;margin-bottom:10px;animation:heroFadeUp 1s ease-out both}
-.hero-title{font-family:'Poppins',sans-serif;font-size:120px;line-height:1.02;color:var(--blue);font-weight:900;letter-spacing:-4px;margin:0 0 8px;animation:heroFadeUp 1.15s ease-out both}
+.hero-title{font-family:'Poppins',sans-serif;font-size:88px;line-height:1.02;color:var(--blue);font-weight:900;letter-spacing:-4px;margin:0 0 8px;animation:heroFadeUp 1.15s ease-out both}
 .hero-tag{font-family:'Poppins',sans-serif;font-size:39px;line-height:1.08;font-weight:700;color:#050505;letter-spacing:-1.5px;margin:0 0 14px;animation:heroFadeUp 1.2s .12s ease-out both}
 .hero-desc{font-size:15px;line-height:1.65;max-width:470px;color:#1f2937;animation:heroFadeUp 1.2s .22s ease-out both}
 .hero-photo{height:410px;background-position:center;background-size:cover;position:relative;animation:heroFadeIn 1.5s .2s ease-out both}
@@ -78,7 +81,7 @@ div.stButton>button:hover{color:var(--blue)!important;border-bottom:2px solid va
 }
 .section-title{font-size:27px;font-weight:800;color:var(--navy);margin:.2rem 0 1rem}
 .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:15px 16px;margin-bottom:12px;box-shadow:0 2px 10px rgba(15,65,130,.025)}
-.panel-title{font-size:20px;font-weight:800;color:var(--navy);margin-bottom:10px}
+.panel-title{font-size:16px;font-weight:800;color:var(--navy);margin-bottom:10px}
 .metric-card{background:linear-gradient(145deg,#f7faff,#edf5ff);border:1px solid #e0ebfa;border-radius:10px;padding:12px 14px;min-height:90px}
 .metric-label{font-size:12px;color:#23416d;font-weight:700}.metric-value{font-size:22px;color:#064bb0;font-weight:800;margin-top:4px}.metric-unit{font-size:11px;color:#64748b}
 .small-note{font-size:12px;color:#64748b}
@@ -183,11 +186,7 @@ html[data-theme="dark"] .hero-photo:before {
   }
   .hero { display: flex !important; flex-direction: column !important; gap: .5rem !important; min-height: 0 !important; }
   .hero-copy { padding: 18px 2px 8px !important; width: 100% !important; }
-  .hero-title {
-    font-size: clamp(4rem, 16vw, 7.5rem) !important;
-    letter-spacing: -2px !important;
-    overflow-wrap: anywhere;
-}
+  .hero-title { font-size: clamp(2.8rem, 14vw, 4.2rem) !important; letter-spacing: -2px !important; overflow-wrap: anywhere; }
   .hero-tag { font-size: clamp(1.55rem, 7vw, 2rem) !important; }
   .hero-desc { font-size: 14px !important; }
   .hero-photo { width: 100% !important; height: 210px !important; border-radius: 12px; }
@@ -557,25 +556,27 @@ with nav_cols[0]:
 for col, label in zip(nav_cols[1:], ["HOME", "SIMULATOR", "ABOUT", "CONTACT"]):
     with col:
         if st.button(label, key=f"nav_{label}", use_container_width=True):
+            # Trigger the page transition even when the user clicks the page
+            # they are already viewing.
             st.session_state.page = {"HOME":"Home","SIMULATOR":"Simulator","ABOUT":"About","CONTACT":"Contact"}[label]
             st.session_state["_beamstat_nav_fade"] = True
             st.rerun()
 st.markdown('<div class="navline"></div>', unsafe_allow_html=True)
 
-# Apply the page transition only after a navigation action. Ordinary widget
-# changes (such as editing loads or calculating reactions) will not replay it.
+# Apply the fade only on navigation clicks, not on normal widget interactions
+# such as editing loads or calculating reactions.
 if st.session_state.pop("_beamstat_nav_fade", False):
     st.markdown("""
     <style>
     @keyframes beamstatPageFade {
-      from { opacity: 0; transform: translateY(10px); }
-      to   { opacity: 1; transform: translateY(0); }
+        from { opacity: 0; transform: translateY(12px); }
+        to   { opacity: 1; transform: translateY(0); }
     }
-    div[data-testid="stMainBlockContainer"] {
-      animation: beamstatPageFade 480ms ease-out both;
+    .stApp [data-testid="stMainBlockContainer"] {
+        animation: beamstatPageFade 0.55s ease-out both;
     }
     @media (prefers-reduced-motion: reduce) {
-      div[data-testid="stMainBlockContainer"] { animation: none !important; }
+        .stApp [data-testid="stMainBlockContainer"] { animation: none !important; }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1051,6 +1052,113 @@ elif st.session_state.page == "Simulator":
                     st.markdown("**3. Verify global equilibrium**")
                     st.write(f"ΣFy = {sumFy:.6f} kN; ΣM about A = {sumMA:.6f} kN·m.")
                     st.caption("The beam is modeled with Euler–Bernoulli elements and constant internal EI. Reactions are recovered at every entered support location.")
+
+                # -----------------------------------------------------------------
+                # Export the completed analysis as CSV and PDF.
+                # The CSV is structured for spreadsheets; the PDF is a readable
+                # summary report containing inputs, reactions, section results,
+                # and equilibrium verification.
+                # -----------------------------------------------------------------
+                csv_buffer = io.StringIO()
+                csv_writer = csv.writer(csv_buffer)
+                csv_writer.writerow(["BeamStat Analysis Results"])
+                csv_writer.writerow(["Beam length (m)", float(L)])
+                csv_writer.writerow(["Applied midpoint moment (kN·m)", float(moment)])
+                csv_writer.writerow([])
+                csv_writer.writerow(["Support Reactions"])
+                csv_writer.writerow(["Support", "Type", "Position x (m)", "Vertical reaction Ry (kN)", "Moment reaction (kN·m)"])
+                for r in support_reactions:
+                    csv_writer.writerow([r["label"], r["type"], r["x"], r["Ry"], r["M"]])
+                csv_writer.writerow([])
+                csv_writer.writerow(["Analysis Point Results"])
+                csv_writer.writerow(["Point", "Position x (m)", "Has support", "Shear V (kN)", "Bending moment M (kN·m)"])
+                for result in section_results:
+                    csv_writer.writerow([result["label"], result["x"], result["has_support"], result["V"], result["M"]])
+                csv_writer.writerow([])
+                csv_writer.writerow(["Equilibrium Verification"])
+                csv_writer.writerow(["Vertical force residual ΣFy (kN)", sumFy])
+                csv_writer.writerow(["Moment residual ΣM about A (kN·m)", sumMA])
+                csv_writer.writerow(["Status", "Verified" if abs(sumFy) < 1e-5 and abs(sumMA) < 1e-5 else "Review required"])
+                csv_writer.writerow([])
+                csv_writer.writerow(["Point Loads"])
+                csv_writer.writerow(["Load", "Magnitude (kN)", "Position x (m)"])
+                for idx, (load_value, load_x) in enumerate(point_loads, start=1):
+                    csv_writer.writerow([idx, load_value, load_x])
+                csv_writer.writerow([])
+                csv_writer.writerow(["Distributed Loads"])
+                csv_writer.writerow(["Load", "Shape", "Start x (m)", "End x (m)", "Peak intensity (kN/m)", "Direction"])
+                for idx, load in enumerate(distributed_loads, start=1):
+                    csv_writer.writerow([idx, load.get("type", "distributed"), load["a"], load["b"], load.get("wmax", 0), load.get("direction", "")])
+                csv_bytes = csv_buffer.getvalue().encode("utf-8-sig")
+
+                pdf_buffer = io.BytesIO()
+                with PdfPages(pdf_buffer) as pdf:
+                    report_lines = [
+                        "BEAMSTAT - BEAM ANALYSIS REPORT",
+                        "Educational simulation results",
+                        "",
+                        f"Beam length: {float(L):.3f} m",
+                        f"Applied midpoint moment: {float(moment):.3f} kN·m",
+                        "",
+                        "SUPPORT REACTIONS",
+                    ]
+                    for r in support_reactions:
+                        line = f"{r['label']} ({r['type']}) at x={r['x']:.3f} m: Ry={r['Ry']:.4f} kN"
+                        if r["type"] == "Fixed":
+                            line += f", M={r['M']:.4f} kN·m"
+                        report_lines.append(line)
+                    report_lines += ["", "RESULTS AT ANALYSIS POINTS"]
+                    for result in section_results:
+                        support_text = "support location" if result["has_support"] else "no support"
+                        report_lines.append(
+                            f"{result['label']} at x={result['x']:.3f} m ({support_text}): "
+                            f"V={result['V']:.4f} kN, M={result['M']:.4f} kN·m"
+                        )
+                    report_lines += ["", "EQUILIBRIUM VERIFICATION", f"ΣFy = {sumFy:.6f} kN", f"ΣM about A = {sumMA:.6f} kN·m"]
+                    report_lines.append("Status: " + ("STATIC EQUILIBRIUM VERIFIED" if abs(sumFy) < 1e-5 and abs(sumMA) < 1e-5 else "REVIEW REQUIRED"))
+                    report_lines += ["", "APPLIED POINT LOADS"]
+                    if point_loads:
+                        for idx, (load_value, load_x) in enumerate(point_loads, start=1):
+                            report_lines.append(f"Load {idx}: {load_value:.3f} kN at x={load_x:.3f} m")
+                    else:
+                        report_lines.append("No point loads entered.")
+                    report_lines += ["", "DISTRIBUTED LOADS"]
+                    if distributed_loads:
+                        for idx, load in enumerate(distributed_loads, start=1):
+                            report_lines.append(
+                                f"Load {idx}: {load.get('type', 'distributed')}, "
+                                f"x={load['a']:.3f} to {load['b']:.3f} m, "
+                                f"peak={load.get('wmax', 0):.3f} kN/m, {load.get('direction', '')}"
+                            )
+                    else:
+                        report_lines.append("No distributed loads entered.")
+                    report_lines += ["", "Model note: Euler–Bernoulli beam elements with constant internal EI.",
+                                     "For educational use; independently verify results before engineering decisions."]
+                    # Split the report across pages if the user has many supports/points.
+                    for start in range(0, len(report_lines), 34):
+                        page_lines = report_lines[start:start + 34]
+                        fig_report = plt.figure(figsize=(8.27, 11.69))
+                        fig_report.text(0.08, 0.95, "\n".join(page_lines), va="top", ha="left",
+                                        family="DejaVu Sans Mono", fontsize=9.2, linespacing=1.55)
+                        pdf.savefig(fig_report, bbox_inches="tight")
+                        plt.close(fig_report)
+                pdf_bytes = pdf_buffer.getvalue()
+
+                st.markdown('<div class="panel-title" style="margin-top:18px">⇩  Export Results</div>', unsafe_allow_html=True)
+                st.caption("Download a copy of this completed simulation for your records or further review.")
+                export_cols = st.columns(2)
+                with export_cols[0]:
+                    st.download_button(
+                        "⬇  Download PDF Report", data=pdf_bytes,
+                        file_name="BeamStat_Analysis_Report.pdf", mime="application/pdf",
+                        use_container_width=True, key="export_beamstat_pdf", on_click="ignore"
+                    )
+                with export_cols[1]:
+                    st.download_button(
+                        "⬇  Download CSV Data", data=csv_bytes,
+                        file_name="BeamStat_Analysis_Results.csv", mime="text/csv",
+                        use_container_width=True, key="export_beamstat_csv", on_click="ignore"
+                    )
             except (np.linalg.LinAlgError, ValueError, KeyError, TypeError) as exc:
                 st.error(f"Unable to solve this support arrangement: {exc}")
         else:
@@ -1101,7 +1209,7 @@ elif st.session_state.page == "About":
 
 elif st.session_state.page == "Contact":
     st.markdown('<h1 class="section-title">Meet the Creators</h1>',unsafe_allow_html=True)
-    st.write("BeamStat is a collaborative, student-built simulation project created to make complex structural or particle/beam analysis more accessible and interactive. Combining foundational engineering principles with modern software tools, the project lets researchers, classmates, and enthusiasts run scenarios, visualize results, and iterate quickly on designs—serving both as a practical learning tool and a showcase of student innovation.")
+    st.write("BeamStat is a student-developed simulation project. Replace the sample entries below with your team's actual names and contact information.")
     # Display eight contacts in a responsive 4-column, 2-row layout.
     for start in range(0, len(CONTACT_CREATORS), 4):
         cols = st.columns(4, gap="medium")
