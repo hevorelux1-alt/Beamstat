@@ -13,12 +13,12 @@ from PIL import Image
 st.set_page_config(page_title="BeamStat | Beam Analysis Simulator", page_icon="🏗️", layout="wide")
 BASE = Path(__file__).resolve().parent
 LOGO_PATH = BASE / "COMPROG.png"       # legacy/fallback logo
-LIGHT_LOGO_PATH = BASE / "logo_light.png"
-DARK_LOGO_PATH = BASE / "logo_dark.png"
+LIGHT_LOGO_PATH = BASE / "comprog (2).png"
+DARK_LOGO_PATH = BASE / "comprog (3).png"
 HERO_PATH = BASE / "COMPROG.jpg"       # original BeamStat construction hero image
 
 CONTACT_CREATORS = [
-    {"name": "Creator 1", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Ramirez, John Emmanuel, "role": "Project Team Member", "email": "johnemmanuelr1@gmail.com"},
     {"name": "Creator 2", "role": "Project Team Member", "email": "Add contact details"},
     {"name": "Creator 3", "role": "Project Team Member", "email": "Add contact details"},
     {"name": "Creator 4", "role": "Project Team Member", "email": "Add contact details"},
