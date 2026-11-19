@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
+import base64
 from pathlib import Path
 from PIL import Image
 
@@ -11,7 +12,9 @@ from PIL import Image
 # -----------------------------------------------------------------------------
 st.set_page_config(page_title="BeamStat | Beam Analysis Simulator", page_icon="🏗️", layout="wide")
 BASE = Path(__file__).resolve().parent
-LOGO_PATH = BASE / "comprog (2).png"       
+LOGO_PATH = BASE / "COMPROG.png"       # legacy/fallback logo
+LIGHT_LOGO_PATH = BASE / "comprog (2).png"
+DARK_LOGO_PATH = BASE / "logo_dark.png"
 HERO_PATH = BASE / "COMPROG.jpg"       # original BeamStat construction hero image
 
 CONTACT_CREATORS = [
@@ -19,6 +22,18 @@ CONTACT_CREATORS = [
     {"name": "Creator 2", "role": "UI/UX Designer", "email": "Add contact details"},
     {"name": "Creator 3", "role": "Engineering Researcher", "email": "Add contact details"},
 ]
+
+def image_to_base64(path):
+    """Encode a local logo so both theme variants can be embedded in the header."""
+    with open(path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode("utf-8")
+
+
+# Load whichever theme logos are available. The old COMPROG.png remains a fallback.
+light_logo_path = LIGHT_LOGO_PATH if LIGHT_LOGO_PATH.exists() else LOGO_PATH
+dark_logo_path = DARK_LOGO_PATH if DARK_LOGO_PATH.exists() else LOGO_PATH
+light_logo_data = image_to_base64(light_logo_path) if light_logo_path.exists() else None
+dark_logo_data = image_to_base64(dark_logo_path) if dark_logo_path.exists() else None
 
 st.markdown("""
 <style>
@@ -489,6 +504,22 @@ body[data-theme="dark"] .stApp .hero-photo:before {{
       rgba(16,24,39,.82) 8%, rgba(16,24,39,.18) 48%, transparent 72%) !important;
   }}
 }}
+/* Theme-aware logo: light logo by default, dark logo for dark theme. */
+.beamstat-logo-wrap {{ display:flex; align-items:center; min-height:48px; }}
+.beamstat-theme-logo {{ width:155px; max-width:100%; height:auto; object-fit:contain; }}
+.beamstat-logo-dark {{ display:none !important; }}
+.beamstat-logo-light {{ display:block !important; }}
+html[data-theme="dark"] .beamstat-logo-light,
+body[data-theme="dark"] .beamstat-logo-light,
+[data-theme="dark"] .beamstat-logo-light {{ display:none !important; }}
+html[data-theme="dark"] .beamstat-logo-dark,
+body[data-theme="dark"] .beamstat-logo-dark,
+[data-theme="dark"] .beamstat-logo-dark {{ display:block !important; }}
+@media (prefers-color-scheme: dark) {{
+  html:not([data-theme="light"]) .beamstat-logo-light {{ display:none !important; }}
+  html:not([data-theme="light"]) .beamstat-logo-dark {{ display:block !important; }}
+}}
+@media (max-width:760px) {{ .beamstat-theme-logo {{ width:118px; }} }}
 /* ============================================================= */
 </style>
 """, unsafe_allow_html=True)
@@ -500,8 +531,18 @@ if "page" not in st.session_state:
 # Header: exact uploaded logo file, plus transparent clickable nav.
 nav_cols = st.columns([2.5, .8, .9, .7, .9])
 with nav_cols[0]:
-    if LOGO_PATH.exists():
-        st.image(Image.open(LOGO_PATH), width=155)
+    if light_logo_data and dark_logo_data:
+        st.markdown(
+            f'''
+            <div class="beamstat-logo-wrap">
+              <img class="beamstat-theme-logo beamstat-logo-light"
+                   src="data:image/png;base64,{light_logo_data}" alt="BeamStat logo for light mode">
+              <img class="beamstat-theme-logo beamstat-logo-dark"
+                   src="data:image/png;base64,{dark_logo_data}" alt="BeamStat logo for dark mode">
+            </div>
+            ''',
+            unsafe_allow_html=True,
+        )
     else:
         st.markdown('<div class="brand-fallback">▰ BeamStat</div>', unsafe_allow_html=True)
 for col, label in zip(nav_cols[1:], ["HOME", "SIMULATOR", "ABOUT", "CONTACT"]):
@@ -876,25 +917,40 @@ elif st.session_state.page == "Simulator":
                         ax.text(x,.85,f"{p:g} kN",ha="center",fontsize=8,color="#c52e28")
                 for load_index, load in enumerate(distributed_loads):
                     if load["b"] > load["a"] and max(load["w0"], load["w1"]) > 0:
-                        top_y = .45
+                        # Draw a closed load envelope, like a conventional structural
+                        # engineering beam diagram: top edge plus vertical end edges.
                         xs = np.linspace(load["a"], load["b"], 13)
+                        max_intensity = max(load["w0"], load["w1"], 1e-9)
+                        arrow_tops = []
                         for xx in xs:
                             ratio = (xx-load["a"])/(load["b"]-load["a"])
                             intensity = load["w0"] + (load["w1"]-load["w0"])*ratio
-                            arrow_h = .08 + .34*intensity/max(load["w0"], load["w1"], 1e-9)
+                            arrow_h = .08 + .42*intensity/max_intensity
+                            arrow_tops.append(.04 + arrow_h)
+                        envelope_color = "#3182BD" if load["direction"] == "Downward" else "#07833b"
+                        # Close both ends of the load shape down to the beam line.
+                        ax.plot([load["a"], load["a"]], [0, arrow_tops[0]], color=envelope_color, lw=1.5, zorder=2)
+                        ax.plot([load["b"], load["b"]], [0, arrow_tops[-1]], color=envelope_color, lw=1.5, zorder=2)
+                        # Rectangular = horizontal top; triangular = sloped top.
+                        ax.plot([load["a"], load["b"]], [arrow_tops[0], arrow_tops[-1]],
+                                color=envelope_color, lw=1.5, zorder=2)
+                        for xx, arrow_top in zip(xs, arrow_tops):
                             if load["direction"] == "Downward":
-                                ax.annotate("", xy=(xx,.04), xytext=(xx,top_y+arrow_h), arrowprops=dict(arrowstyle="-|>",color="#3182BD",lw=1))
+                                ax.annotate("", xy=(xx,.04), xytext=(xx,arrow_top),
+                                            arrowprops=dict(arrowstyle="-|>",color=envelope_color,lw=1))
                             else:
-                                ax.annotate("", xy=(xx,top_y+arrow_h), xytext=(xx,.04), arrowprops=dict(arrowstyle="-|>",color="#07833b",lw=1))
+                                ax.annotate("", xy=(xx,arrow_top), xytext=(xx,.04),
+                                            arrowprops=dict(arrowstyle="-|>",color=envelope_color,lw=1))
                         shape = "Triangle" if load["type"] == "triangular" else "Rectangular"
-                        ax.text((load["a"]+load["b"])/2,1.0 if load_index == 0 else 1.08,
-                            f"{shape}: {load['w0']:g} → {load['w1']:g} kN/m",ha="center",fontsize=8,color="#3182BD")
+                        label_y = max(arrow_tops) + .12
+                        ax.text((load["a"]+load["b"])/2, label_y,
+                            f"{shape}: {load['w0']:g} → {load['w1']:g} kN/m",ha="center",fontsize=8,color=envelope_color)
                 if moment:
                     ax.annotate("",xy=(L/2+.25,.22),xytext=(L/2-.25,.22),arrowprops=dict(arrowstyle="->",connectionstyle="arc3,rad=-.8",color="#8b36d9",lw=2))
                     ax.text(L/2,.52,f"M = {moment:g} kN·m",ha="center",fontsize=8,color="#8b36d9")
                 ax.annotate("",xy=(L,-1.12),xytext=(0,-1.12),arrowprops=dict(arrowstyle="<->",color="#64748b"))
                 ax.text(L/2,-1.25,f"L = {L:.2f} m",ha="center",fontsize=8,color="#475569")
-                ax.set_xlim(-.45,L+.45); ax.set_ylim(-1.48,1.08); ax.axis("off")
+                ax.set_xlim(-.45,L+.45); ax.set_ylim(-1.48,1.35); ax.axis("off")
                 ax.tick_params(colors=chart_fg)
                 st.pyplot(fig,use_container_width=True)
                 plt.close(fig)
@@ -982,4 +1038,5 @@ elif st.session_state.page == "Contact":
         with col:
             st.markdown(f'<div class="panel"><div style="font-size:30px;color:#0752b5">◉</div><div class="panel-title">{creator["name"]}</div><b>{creator["role"]}</b><p class="small-note">{creator["email"]}</p></div>',unsafe_allow_html=True)
     st.info("To personalize this page, edit CONTACT_CREATORS near the top of beamstat_app.py.")
+
 
