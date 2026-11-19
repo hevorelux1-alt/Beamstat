@@ -38,7 +38,7 @@ div.stButton>button:hover{color:var(--blue)!important;border-bottom:2px solid va
 .hero{display:grid;grid-template-columns:1.02fr 1fr;min-height:420px;align-items:center;gap:1rem;margin-bottom:1.3rem}
 .hero-copy{padding:30px 0 30px 12px;z-index:2;animation:heroFadeUp 1.05s ease-out both}
 .eyebrow{font-style:italic;color:#064ca8;font-size:15px;margin-bottom:10px;animation:heroFadeUp 1s ease-out both}
-.hero-title{font-family:'Poppins',sans-serif;font-size:1000px;line-height:1.02;color:var(--blue);font-weight:900;letter-spacing:-4px;margin:0 0 8px;animation:heroFadeUp 1.15s ease-out both}
+.hero-title{font-family:'Poppins',sans-serif;font-size:88px;line-height:1.02;color:var(--blue);font-weight:900;letter-spacing:-4px;margin:0 0 8px;animation:heroFadeUp 1.15s ease-out both}
 .hero-tag{font-family:'Poppins',sans-serif;font-size:39px;line-height:1.08;font-weight:700;color:#050505;letter-spacing:-1.5px;margin:0 0 14px;animation:heroFadeUp 1.2s .12s ease-out both}
 .hero-desc{font-size:15px;line-height:1.65;max-width:470px;color:#1f2937;animation:heroFadeUp 1.2s .22s ease-out both}
 .hero-photo{height:410px;background-position:center;background-size:cover;position:relative;animation:heroFadeIn 1.5s .2s ease-out both}
@@ -190,7 +190,7 @@ elif st.session_state.page == "Simulator":
             udl_b = st.number_input("End b (m)", min_value=0.0, max_value=float(L), value=min(4.0,float(L)), step=.5)
         st.markdown("**Applied Moment**")
         moment = st.number_input("Moment M (kN·m; CCW positive)", value=30.0, step=1.0)
-        EI = st.number_input("Flexural rigidity EI (kN·m²)", min_value=1.0, value=20000.0, step=1000.0)
+        EI = 20000.0  # Internal constant used by the beam stiffness solver; hidden from the user.
         calculate = st.button("▦  Calculate Reactions  →", use_container_width=True)
 
     with result_col:
@@ -270,7 +270,7 @@ elif st.session_state.page == "Simulator":
                         st.latex(r"W_{eq}=w(b-a)")
                         st.write(f"W_eq = {w:g}({udl_b:g} − {udl_a:g}) = {udl_force:.3f} kN, acting at x̄ = {udl_centroid:.3f} m from A.")
                         st.markdown("**2. Build the beam stiffness model**")
-                        st.write(f"The beam is divided into {len(nodes)-1} Euler–Bernoulli elements at the load positions and UDL boundaries. Each element uses EI = {EI:g} kN·m².")
+                        st.write(f"The beam is divided into {len(nodes)-1} Euler–Bernoulli elements at the load positions and UDL boundaries. A constant internal EI value is used by the solver.")
                         st.latex(r"\mathbf{K}\mathbf{d}=\mathbf{F}")
                         st.markdown("**3. Apply support restraints**")
                         st.write(f"At A: {support_A}. At B: {support_B}. Pin and roller restrain vertical displacement; fixed supports also restrain rotation.")
