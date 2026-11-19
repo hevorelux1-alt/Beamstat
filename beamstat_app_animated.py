@@ -65,6 +65,129 @@ div.stButton>button:hover{color:var(--blue)!important;border-bottom:2px solid va
 div[data-testid="stSelectbox"] label,div[data-testid="stNumberInput"] label{font-size:12px;font-weight:600;color:#20395f}
 .stAlert{border-radius:10px}
 @media(max-width:900px){.hero{grid-template-columns:1fr}.hero-photo{height:260px}.hero-title{font-size:62px;letter-spacing:-2.5px}.hero-tag{font-size:30px}}
+
+/* ================= THEME + RESPONSIVE ACCESSIBILITY OVERRIDES ================= */
+/* Use Streamlit's active theme variables so text follows the selected app theme. */
+:root {
+  color-scheme: light dark;
+  --bs-bg: var(--background-color, #ffffff);
+  --bs-secondary: var(--secondary-background-color, #f4f7fb);
+  --bs-text: var(--text-color, #172033);
+  --bs-muted: color-mix(in srgb, var(--bs-text) 68%, transparent);
+  --bs-border: color-mix(in srgb, var(--bs-text) 18%, transparent);
+  --bs-blue: #3985ed;
+  --bs-panel: var(--secondary-background-color, #f7faff);
+}
+.stApp, [data-testid="stAppViewContainer"] {
+  background: var(--bs-bg) !important;
+  color: var(--bs-text) !important;
+}
+.stApp p, .stApp li, .stApp label, .stApp span, .stApp small,
+.stApp [data-testid="stMarkdownContainer"] {
+  color: inherit;
+}
+.stApp h1, .stApp h2, .stApp h3, .stApp h4,
+.section-title, .panel-title {
+  color: var(--bs-text) !important;
+}
+.panel, .metric-card {
+  background: var(--bs-secondary) !important;
+  color: var(--bs-text) !important;
+  border-color: var(--bs-border) !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,.06);
+}
+.metric-label, .metric-unit, .small-note,
+div[data-testid="stSelectbox"] label,
+div[data-testid="stNumberInput"] label {
+  color: var(--bs-muted) !important;
+}
+.metric-value, .hero-title { color: var(--bs-blue) !important; }
+.hero-tag { color: var(--bs-text) !important; }
+.hero-desc { color: var(--bs-text) !important; }
+.eyebrow { color: var(--bs-blue) !important; }
+.navline { border-color: var(--bs-border) !important; }
+.brand-fallback { color: var(--bs-text) !important; }
+
+/* Streamlit inputs, dropdowns, tabs and buttons */
+.stApp input, .stApp textarea,
+.stApp [data-baseweb="select"] > div,
+.stApp [data-baseweb="input"] > div,
+.stApp [data-baseweb="textarea"] > div {
+  color: var(--bs-text) !important;
+  background-color: var(--bs-secondary) !important;
+  border-color: var(--bs-border) !important;
+}
+.stApp [data-baseweb="select"] *,
+.stApp [data-baseweb="popover"] *,
+.stApp [role="listbox"] *,
+.stApp [role="option"] {
+  color: var(--bs-text) !important;
+}
+.stApp button[kind], .stApp .stButton > button {
+  color: var(--bs-text);
+  border-color: var(--bs-border);
+}
+.stApp .stButton > button[kind="primary"] {
+  color: white !important;
+}
+.stApp [data-testid="stDataFrame"],
+.stApp [data-testid="stTable"] {
+  color: var(--bs-text);
+}
+.stApp hr { border-color: var(--bs-border) !important; }
+
+/* Hero image overlay adapts to dark backgrounds. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hero-photo:before,
+  body:not([data-theme="light"]) .hero-photo:before {
+    background: linear-gradient(90deg, rgba(14,18,28,.98) 0%,
+      rgba(14,18,28,.82) 8%, rgba(14,18,28,.18) 48%, transparent 72%);
+  }
+}
+/* Explicit dark theme selectors used by Streamlit versions. */
+[data-theme="dark"] .hero-photo:before,
+body[data-theme="dark"] .hero-photo:before,
+html[data-theme="dark"] .hero-photo:before {
+  background: linear-gradient(90deg, rgba(14,18,28,.98) 0%,
+    rgba(14,18,28,.82) 8%, rgba(14,18,28,.18) 48%, transparent 72%) !important;
+}
+[data-theme="dark"] .hero-tag,
+[data-theme="dark"] .hero-desc { color: #f1f5f9 !important; }
+
+/* Small-screen layout: prevent horizontal overflow and make controls tappable. */
+@media (max-width: 760px) {
+  .block-container {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    padding-top: .6rem !important;
+  }
+  .hero { display: flex !important; flex-direction: column !important; gap: .5rem !important; min-height: 0 !important; }
+  .hero-copy { padding: 18px 2px 8px !important; width: 100% !important; }
+  .hero-title { font-size: clamp(2.8rem, 14vw, 4.2rem) !important; letter-spacing: -2px !important; overflow-wrap: anywhere; }
+  .hero-tag { font-size: clamp(1.55rem, 7vw, 2rem) !important; }
+  .hero-desc { font-size: 14px !important; }
+  .hero-photo { width: 100% !important; height: 210px !important; border-radius: 12px; }
+  .section-title { font-size: 23px !important; }
+  .panel { padding: 12px !important; }
+  .metric-card { min-height: 76px !important; padding: 10px !important; }
+  .metric-value { font-size: 19px !important; overflow-wrap: anywhere; }
+  .stButton > button { min-height: 42px !important; white-space: normal !important; }
+  .stNumberInput input, .stTextInput input, .stSelectbox [role="combobox"] {
+    min-height: 42px !important;
+  }
+  [data-testid="stHorizontalBlock"] { flex-wrap: wrap !important; gap: .45rem !important; }
+  [data-testid="column"] { min-width: min(100%, 145px) !important; flex: 1 1 145px !important; }
+  [data-testid="stPlotlyChart"], [data-testid="stImage"] { max-width: 100% !important; }
+  .stDataFrame, [data-testid="stDataFrame"] { overflow-x: auto !important; }
+}
+@media (max-width: 420px) {
+  .block-container { padding-left: .7rem !important; padding-right: .7rem !important; }
+  .hero-photo { height: 175px !important; }
+  .panel-title { font-size: 15px !important; }
+  .small-note { font-size: 11px !important; }
+}
+/* ============================================================================ */
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -488,3 +611,4 @@ elif st.session_state.page == "Contact":
         with col:
             st.markdown(f'<div class="panel"><div style="font-size:30px;color:#0752b5">◉</div><div class="panel-title">{creator["name"]}</div><b>{creator["role"]}</b><p class="small-note">{creator["email"]}</p></div>',unsafe_allow_html=True)
     st.info("To personalize this page, edit CONTACT_CREATORS near the top of beamstat_app.py.")
+
