@@ -11,7 +11,7 @@ from PIL import Image
 # -----------------------------------------------------------------------------
 st.set_page_config(page_title="BeamStat | Beam Analysis Simulator", page_icon="🏗️", layout="wide")
 BASE = Path(__file__).resolve().parent
-LOGO_PATH = BASE / "comprog (1).png"       
+LOGO_PATH = BASE / "comprog (2).png"       
 HERO_PATH = BASE / "COMPROG.jpg"       # original BeamStat construction hero image
 
 CONTACT_CREATORS = [
