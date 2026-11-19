@@ -13,15 +13,14 @@ from PIL import Image
 st.set_page_config(page_title="BeamStat | Beam Analysis Simulator", page_icon="🏗️", layout="wide")
 BASE = Path(__file__).resolve().parent
 LOGO_PATH = BASE / "COMPROG.png"       # legacy/fallback logo
-LIGHT_LOGO_PATH = BASE / "logo_light.png"
-DARK_LOGO_PATH = BASE / "logo_dark.png"
+LIGHT_LOGO_PATH = BASE / "comprog (2).png"
+DARK_LOGO_PATH = BASE / "comprog (3).png"
 HERO_PATH = BASE / "COMPROG.jpg"       # original BeamStat construction hero image
 
 CONTACT_CREATORS = [
      {"name": "Ramirez, John Emmanuel", "role": "Project Manager & Workflow lead", "email": "johnemmanuelr1@gmail.com"},
   {"name": "Lagunzad, John Roldan", "role": "Project Manager & Workflow Lead", "email": "lagunzad.johnroldan.ce@gmail.com"},
-    {"name": "Miranda, Chester Kyle", "role": "CE Technical Specialist / Formulas Analys", "email": "miranda.chesterkyle.ce@gmail.com
-"},
+   {"name": "Miranda, Chester Kyle", "role": "CE Technical Specialist / Formulas Analysis", "email": "miranda.chesterkyle.ce@gmail.com"},
     {"name": "Lahora, Jasmine Blythe", "role": "CE Technical Specialist / Formulas Analys", "email": "Add contact details"},
     {"name": "Bullon, Ella", "role": "UI/UX Designer", "email": "bullonella023@gmail.com"},
     {"name": "Reago, Princess Camille T. ", "role": "Quality Assurance & Testing Engineer", "email": "camillereago25@gmail.com"},
