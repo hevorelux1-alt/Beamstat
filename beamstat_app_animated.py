@@ -188,6 +188,13 @@ html[data-theme="dark"] .hero-photo:before {
 }
 /* ============================================================================ */
 
+
+/* Slightly larger logo, with mobile-safe header spacing. */
+div[data-testid="stImage"] img { max-width: 100%; height: auto; }
+@media (max-width: 760px) {
+  div[data-testid="stImage"] img { max-width: 118px; }
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -196,16 +203,16 @@ if "page" not in st.session_state:
     st.session_state.page = "Home"
 
 # Header: exact uploaded logo file, plus transparent clickable nav.
-nav_cols = st.columns([2.5, .8, .9, .7, .9, .8])
+nav_cols = st.columns([2.5, .8, .9, .7, .9])
 with nav_cols[0]:
     if LOGO_PATH.exists():
-        st.image(Image.open(LOGO_PATH), width=120)
+        st.image(Image.open(LOGO_PATH), width=155)
     else:
         st.markdown('<div class="brand-fallback">▰ BeamStat</div>', unsafe_allow_html=True)
-for col, label in zip(nav_cols[1:], ["HOME", "SIMULATOR", "ABOUT", "CONTACT", "⌕"]):
+for col, label in zip(nav_cols[1:], ["HOME", "SIMULATOR", "ABOUT", "CONTACT"]):
     with col:
         if st.button(label, key=f"nav_{label}", use_container_width=True):
-            st.session_state.page = {"HOME":"Home","SIMULATOR":"Simulator","ABOUT":"About","CONTACT":"Contact","⌕":"Contact"}[label]
+            st.session_state.page = {"HOME":"Home","SIMULATOR":"Simulator","ABOUT":"About","CONTACT":"Contact"}[label]
             st.rerun()
 st.markdown('<div class="navline"></div>', unsafe_allow_html=True)
 
@@ -608,7 +615,4 @@ elif st.session_state.page == "Contact":
     st.write("BeamStat is a student-developed simulation project. Replace the sample entries below with your team's actual names and contact information.")
     cols = st.columns(len(CONTACT_CREATORS))
     for col, creator in zip(cols, CONTACT_CREATORS):
-        with col:
-            st.markdown(f'<div class="panel"><div style="font-size:30px;color:#0752b5">◉</div><div class="panel-title">{creator["name"]}</div><b>{creator["role"]}</b><p class="small-note">{creator["email"]}</p></div>',unsafe_allow_html=True)
-    st.info("To personalize this page, edit CONTACT_CREATORS near the top of beamstat_app.py.")
-
+       
