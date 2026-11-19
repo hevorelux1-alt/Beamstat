@@ -18,7 +18,7 @@ DARK_LOGO_PATH = BASE / "comprog (3).png"
 HERO_PATH = BASE / "COMPROG.jpg"       # original BeamStat construction hero image
 
 CONTACT_CREATORS = [
-    {"name": "Ramirez, John Emmanuel, "role": "Project Team Member", "email": "johnemmanuelr1@gmail.com"},
+    {"name": "Ramirez, John Emmanuel", "role": "Project Team Member", "email": "johnemmanuelr1@gmail.com"},
     {"name": "Creator 2", "role": "Project Team Member", "email": "Add contact details"},
     {"name": "Creator 3", "role": "Project Team Member", "email": "Add contact details"},
     {"name": "Creator 4", "role": "Project Team Member", "email": "Add contact details"},
