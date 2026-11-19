@@ -1097,7 +1097,7 @@ elif st.session_state.page == "About":
 
 elif st.session_state.page == "Contact":
     st.markdown('<h1 class="section-title">Meet the Creators</h1>',unsafe_allow_html=True)
-    st.write("BeamStat is a student-developed simulation project. Replace the sample entries below with your team's actual names and contact information.")
+    st.write("BeamStat is a student-developed simulation project.")
     # Display eight contacts in a responsive 4-column, 2-row layout.
     for start in range(0, len(CONTACT_CREATORS), 4):
         cols = st.columns(4, gap="medium")
