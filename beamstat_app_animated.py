@@ -13,14 +13,19 @@ from PIL import Image
 st.set_page_config(page_title="BeamStat | Beam Analysis Simulator", page_icon="🏗️", layout="wide")
 BASE = Path(__file__).resolve().parent
 LOGO_PATH = BASE / "COMPROG.png"       # legacy/fallback logo
-LIGHT_LOGO_PATH = BASE / "comprog (2).png"
-DARK_LOGO_PATH = BASE / "comprog (3).png"
+LIGHT_LOGO_PATH = BASE / "logo_light.png"
+DARK_LOGO_PATH = BASE / "logo_dark.png"
 HERO_PATH = BASE / "COMPROG.jpg"       # original BeamStat construction hero image
 
 CONTACT_CREATORS = [
-    {"Ramirez, John Emmanuel": "Creator 1", "role": "Project Lead / Developer", "email": "johnemmanuelr1@gmail.com"},
-    {"name": "Creator 2", "role": "UI/UX Designer", "email": "Add contact details"},
-    {"name": "Creator 3", "role": "Engineering Researcher", "email": "Add contact details"},
+    {"name": "Creator 1", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 2", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 3", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 4", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 5", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 6", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 7", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 8", "role": "Project Team Member", "email": "Add contact details"},
 ]
 
 def image_to_base64(path):
@@ -1073,8 +1078,17 @@ elif st.session_state.page == "About":
 elif st.session_state.page == "Contact":
     st.markdown('<h1 class="section-title">Meet the Creators</h1>',unsafe_allow_html=True)
     st.write("BeamStat is a student-developed simulation project. Replace the sample entries below with your team's actual names and contact information.")
-    cols = st.columns(len(CONTACT_CREATORS))
-    for col, creator in zip(cols, CONTACT_CREATORS):
-        with col:
-            st.markdown(f'<div class="panel"><div style="font-size:30px;color:#0752b5">◉</div><div class="panel-title">{creator["name"]}</div><b>{creator["role"]}</b><p class="small-note">{creator["email"]}</p></div>',unsafe_allow_html=True)
-    st.info("To personalize this page, edit CONTACT_CREATORS near the top of beamstat_app.py.")
+    # Display eight contacts in a responsive 4-column, 2-row layout.
+    for start in range(0, len(CONTACT_CREATORS), 4):
+        cols = st.columns(4, gap="medium")
+        for col, creator in zip(cols, CONTACT_CREATORS[start:start + 4]):
+            with col:
+                st.markdown(
+                    f'<div class="panel" style="min-height:170px; margin-bottom:14px;">'
+                    f'<div style="font-size:30px;color:#3182BD">◉</div>'
+                    f'<div class="panel-title">{creator["name"]}</div>'
+                    f'<b>{creator["role"]}</b>'
+                    f'<p class="small-note">{creator["email"]}</p>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
