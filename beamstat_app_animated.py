@@ -14,7 +14,7 @@ st.set_page_config(page_title="BeamStat | Beam Analysis Simulator", page_icon="�
 BASE = Path(__file__).resolve().parent
 LOGO_PATH = BASE / "COMPROG.png"       # legacy/fallback logo
 LIGHT_LOGO_PATH = BASE / "comprog (2).png"
-DARK_LOGO_PATH = BASE / "logo_dark.png"
+DARK_LOGO_PATH = BASE / "comprog (3).png"
 HERO_PATH = BASE / "COMPROG.jpg"       # original BeamStat construction hero image
 
 CONTACT_CREATORS = [
@@ -553,29 +553,52 @@ for col, label in zip(nav_cols[1:], ["HOME", "SIMULATOR", "ABOUT", "CONTACT"]):
 st.markdown('<div class="navline"></div>', unsafe_allow_html=True)
 
 
+def distributed_intensity(load, x):
+    """Return the nonnegative load intensity (kN/m) at coordinate x."""
+    a, b = float(load["a"]), float(load["b"])
+    x = np.asarray(x, dtype=float)
+    shape = load.get("type", "rectangular")
+    wmax = float(load.get("wmax", max(load.get("w0", 0.0), load.get("w1", 0.0))))
+    if shape == "tent":
+        peak = float(load["peak_x"])
+        left_ratio = np.clip((x-a) / max(peak-a, 1e-12), 0.0, 1.0)
+        right_ratio = np.clip((b-x) / max(b-peak, 1e-12), 0.0, 1.0)
+        return wmax * np.where(x <= peak, left_ratio, right_ratio)
+    if shape == "triangular_increasing":
+        return wmax * np.clip((x-a) / max(b-a, 1e-12), 0.0, 1.0)
+    if shape == "triangular_decreasing":
+        return wmax * np.clip((b-x) / max(b-a, 1e-12), 0.0, 1.0)
+    if shape == "triangular":  # backward compatibility with earlier saved settings
+        w0, w1 = float(load.get("w0", 0.0)), float(load.get("w1", wmax))
+        return w0 + (w1-w0)*(x-a)/max(b-a, 1e-12)
+    return np.full_like(x, wmax, dtype=float)
+
+
 def distributed_load_integrals(load, x0=None, x1=None):
-    """Return signed force, first moment about A, and first moment about x1.
-    Load intensity is positive downward in the UI; returned force is negative
-    for downward loading and positive for upward loading.
-    """
+    """Return signed resultant, moment about A, and moment about section x1."""
     a, b = float(load["a"]), float(load["b"])
     lo = a if x0 is None else max(a, float(x0))
     hi = b if x1 is None else min(b, float(x1))
     if hi <= lo or b <= a:
         return 0.0, 0.0, 0.0
-    w0, w1 = float(load["w0"]), float(load["w1"])
     direction = 1.0 if load.get("direction", "Downward") == "Upward" else -1.0
-    # Three-point Gauss-Legendre integration exactly integrates these
-    # linear-intensity force and first-moment expressions.
+    # Split at the tent peak so each integration interval has a linear intensity.
+    cuts = [lo, hi]
+    if load.get("type") == "tent":
+        peak = float(load["peak_x"])
+        if lo < peak < hi:
+            cuts.insert(1, peak)
     pts = np.array([-np.sqrt(3/5), 0.0, np.sqrt(3/5)])
     weights = np.array([5/9, 8/9, 5/9])
-    xs = (hi+lo)/2 + (hi-lo)/2*pts
-    intensity = w0 + (w1-w0)*(xs-a)/(b-a)
-    signed_q = direction * intensity
-    scale = (hi-lo)/2
-    force = scale * np.sum(weights*signed_q)
-    moment_A = scale * np.sum(weights*signed_q*xs)
-    moment_cut = 0.0 if x1 is None else scale * np.sum(weights*signed_q*(float(x1)-xs))
+    force = moment_A = moment_cut = 0.0
+    for left, right in zip(cuts[:-1], cuts[1:]):
+        xs = (right+left)/2 + (right-left)/2*pts
+        signed_q = direction * distributed_intensity(load, xs)
+        scale = (right-left)/2
+        force += scale * np.sum(weights*signed_q)
+        moment_A += scale * np.sum(weights*signed_q*xs)
+        if x1 is not None:
+            moment_cut += scale * np.sum(weights*signed_q*(float(x1)-xs))
     return float(force), float(moment_A), float(moment_cut)
 
 
@@ -583,8 +606,9 @@ def solve_beam(L, supports, point_loads, distributed_loads, applied_moment, EI):
     """Euler-Bernoulli beam FE model with point and linearly varying loads."""
     support_positions = [float(s["x"]) for s in supports]
     load_bounds = [v for load in distributed_loads for v in (float(load["a"]), float(load["b"]))]
+    load_peaks = [float(load["peak_x"]) for load in distributed_loads if load.get("type") == "tent"]
     nodes = sorted(set([0.0, float(L)] + support_positions
-                       + [float(x) for _, x in point_loads] + load_bounds + [float(L)/2]))
+                       + [float(x) for _, x in point_loads] + load_bounds + load_peaks + [float(L)/2]))
     n = len(nodes)
     K = np.zeros((2*n, 2*n), dtype=float)
     F = np.zeros(2*n, dtype=float)
@@ -610,7 +634,7 @@ def solve_beam(L, supports, point_loads, distributed_loads, applied_moment, EI):
                 for gp, gw in zip(gauss_pts, gauss_weights):
                     xi = (gp+1)/2
                     x = xL + xi*le
-                    wmag = load["w0"] + (load["w1"]-load["w0"])*(x-load["a"])/(load["b"]-load["a"])
+                    wmag = float(distributed_intensity(load, x))
                     q = direction*wmag
                     N = np.array([1-3*xi**2+2*xi**3,
                                   le*(xi-2*xi**2+xi**3),
@@ -784,29 +808,36 @@ elif st.session_state.page == "Simulator":
                 point_loads.append((p, x))
 
         st.markdown("**5. Distributed Loads**")
-        st.caption("Add rectangular (uniform) or triangular (linearly varying) loads. Intensities are in kN/m.")
+        st.caption("Choose a load shape. BeamStat automatically creates its intensity profile; only the maximum intensity is needed.")
         distributed_count = st.number_input("Number of distributed loads", min_value=0, max_value=10, value=1, step=1, key="multi_distributed_count")
         distributed_loads = []
+        shape_options = ["Rectangular (uniform)", "Triangular – increasing", "Triangular – decreasing", "Tent-shaped (peak in middle/inside)"]
+        shape_map = {
+            "Rectangular (uniform)": "rectangular",
+            "Triangular – increasing": "triangular_increasing",
+            "Triangular – decreasing": "triangular_decreasing",
+            "Tent-shaped (peak in middle/inside)": "tent",
+        }
         for i in range(int(distributed_count)):
             with st.expander(f"Distributed Load {i+1}", expanded=(i == 0)):
-                kind = st.selectbox("Load shape", ["Rectangular (UDL)", "Triangular"], key=f"dist_kind_{i}")
+                shape_label = st.selectbox("Load shape", shape_options, key=f"dist_shape_{i}")
+                shape = shape_map[shape_label]
                 c1, c2 = st.columns(2)
                 with c1:
-                    a = st.number_input("Start a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"dist_a_{i}")
+                    a = st.number_input("Start position a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"dist_a_{i}")
                 with c2:
-                    b = st.number_input("End b (m)", min_value=0.0, max_value=float(L), value=float(L), step=0.5, key=f"dist_b_{i}")
-                d1, d2 = st.columns(2)
-                with d1:
-                    w0 = st.number_input("Intensity at start (kN/m)", min_value=0.0, value=0.0, step=1.0, key=f"dist_w0_{i}")
-                with d2:
-                    if kind == "Rectangular (UDL)":
-                        w1 = w0
-                        st.number_input("Intensity at end (kN/m)", min_value=0.0, value=float(w0), disabled=True, key=f"dist_w1_disabled_{i}")
-                    else:
-                        w1 = st.number_input("Intensity at end (kN/m)", min_value=0.0, value=0.0, step=1.0, key=f"dist_w1_{i}")
+                    b = st.number_input("End position b (m)", min_value=0.0, max_value=float(L), value=float(L), step=0.5, key=f"dist_b_{i}")
+                peak_x = None
+                if shape == "tent":
+                    peak_x = st.number_input("Peak position (m)", min_value=float(a), max_value=float(b), value=float((a+b)/2), step=0.5, key=f"dist_peak_{i}")
+                    st.caption("The load starts at zero, rises to the maximum at the peak, then returns to zero.")
+                wmax = st.number_input("Maximum intensity (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_wmax_{i}")
                 direction = st.selectbox("Direction", ["Downward", "Upward"], key=f"dist_dir_{i}")
-                distributed_loads.append({"type": "triangular" if kind == "Triangular" else "rectangular",
-                    "a": float(a), "b": float(b), "w0": float(w0), "w1": float(w1), "direction": direction})
+                distributed_loads.append({"type": shape, "a": float(a), "b": float(b),
+                    "peak_x": None if peak_x is None else float(peak_x), "wmax": float(wmax),
+                    "w0": 0.0 if shape in ("triangular_increasing", "tent") else float(wmax),
+                    "w1": 0.0 if shape in ("triangular_decreasing", "tent") else float(wmax),
+                    "direction": direction})
         st.markdown("**6. Applied Moment**")
         moment = st.number_input("Moment M at beam midpoint (kN·m; CCW positive)", value=0.0, step=1.0, key="multi_moment")
         EI = 20000.0  # Internal constant used by the solver.
@@ -820,6 +851,8 @@ elif st.session_state.page == "Simulator":
                 for i, load in enumerate(distributed_loads):
                     if load["b"] <= load["a"]:
                         raise ValueError(f"Distributed Load {i+1}: end position must be greater than start position.")
+                    if load.get("type") == "tent" and not (load["a"] < load["peak_x"] < load["b"]):
+                        raise ValueError(f"Distributed Load {i+1}: peak position must be between the start and end positions.")
                 supports = []
                 for i, row in edited_supports.reset_index(drop=True).iterrows():
                     sx = float(row["Distance from A (m)"])
@@ -916,35 +949,40 @@ elif st.session_state.page == "Simulator":
                         ax.annotate("",xy=(x,.04),xytext=(x,.78),arrowprops=dict(arrowstyle="-|>",color="#e13b32",lw=2))
                         ax.text(x,.85,f"{p:g} kN",ha="center",fontsize=8,color="#c52e28")
                 for load_index, load in enumerate(distributed_loads):
-                    if load["b"] > load["a"] and max(load["w0"], load["w1"]) > 0:
-                        # Draw a closed load envelope, like a conventional structural
-                        # engineering beam diagram: top edge plus vertical end edges.
-                        xs = np.linspace(load["a"], load["b"], 13)
-                        max_intensity = max(load["w0"], load["w1"], 1e-9)
-                        arrow_tops = []
-                        for xx in xs:
-                            ratio = (xx-load["a"])/(load["b"]-load["a"])
-                            intensity = load["w0"] + (load["w1"]-load["w0"])*ratio
-                            arrow_h = .08 + .42*intensity/max_intensity
-                            arrow_tops.append(.04 + arrow_h)
+                    if load["b"] > load["a"] and float(load.get("wmax", max(load.get("w0", 0), load.get("w1", 0)))) > 0:
+                        if load.get("type") == "tent":
+                            xs = np.linspace(load["a"], load["b"], 25)
+                            xs = np.unique(np.append(xs, load["peak_x"]))
+                        else:
+                            xs = np.linspace(load["a"], load["b"], 17)
+                        intensities = distributed_intensity(load, xs)
+                        max_intensity = max(float(np.max(intensities)), 1e-9)
+                        arrow_tops = .04 + (.08 + .42*intensities/max_intensity)
                         envelope_color = "#3182BD" if load["direction"] == "Downward" else "#07833b"
-                        # Close both ends of the load shape down to the beam line.
-                        ax.plot([load["a"], load["a"]], [0, arrow_tops[0]], color=envelope_color, lw=1.5, zorder=2)
-                        ax.plot([load["b"], load["b"]], [0, arrow_tops[-1]], color=envelope_color, lw=1.5, zorder=2)
-                        # Rectangular = horizontal top; triangular = sloped top.
-                        ax.plot([load["a"], load["b"]], [arrow_tops[0], arrow_tops[-1]],
-                                color=envelope_color, lw=1.5, zorder=2)
+                        # Draw arrows first, then a closed outline so the envelope remains visible.
                         for xx, arrow_top in zip(xs, arrow_tops):
                             if load["direction"] == "Downward":
-                                ax.annotate("", xy=(xx,.04), xytext=(xx,arrow_top),
-                                            arrowprops=dict(arrowstyle="-|>",color=envelope_color,lw=1))
+                                ax.annotate("", xy=(xx,.045), xytext=(xx,arrow_top-.025),
+                                    arrowprops=dict(arrowstyle="-|>", color=envelope_color, lw=1.0), zorder=4)
                             else:
-                                ax.annotate("", xy=(xx,arrow_top), xytext=(xx,.04),
-                                            arrowprops=dict(arrowstyle="-|>",color=envelope_color,lw=1))
-                        shape = "Triangle" if load["type"] == "triangular" else "Rectangular"
-                        label_y = max(arrow_tops) + .12
+                                ax.annotate("", xy=(xx,arrow_top-.025), xytext=(xx,.045),
+                                    arrowprops=dict(arrowstyle="-|>", color=envelope_color, lw=1.0), zorder=4)
+                        # Closed boundary: vertical ends and a continuous top profile.
+                        ax.plot([load["a"], load["a"]], [.045, arrow_tops[0]], color=envelope_color, lw=2.2, zorder=8)
+                        ax.plot(xs, arrow_tops, color=envelope_color, lw=2.2, zorder=8)
+                        ax.plot([load["b"], load["b"]], [arrow_tops[-1], .045], color=envelope_color, lw=2.2, zorder=8)
+                        shape_labels = {
+                            "rectangular": "Rectangular",
+                            "triangular_increasing": "Triangle increasing",
+                            "triangular_decreasing": "Triangle decreasing",
+                            "tent": "Tent-shaped triangle",
+                            "triangular": "Triangle",
+                        }
+                        label = shape_labels.get(load["type"], "Distributed load")
+                        label_y = float(np.max(arrow_tops)) + .12
                         ax.text((load["a"]+load["b"])/2, label_y,
-                            f"{shape}: {load['w0']:g} → {load['w1']:g} kN/m",ha="center",fontsize=8,color=envelope_color)
+                            f"{label}: {load.get('wmax', max(load.get('w0', 0), load.get('w1', 0))):g} kN/m",
+                            ha="center", fontsize=8, color=envelope_color)
                 if moment:
                     ax.annotate("",xy=(L/2+.25,.22),xytext=(L/2-.25,.22),arrowprops=dict(arrowstyle="->",connectionstyle="arc3,rad=-.8",color="#8b36d9",lw=2))
                     ax.text(L/2,.52,f"M = {moment:g} kN·m",ha="center",fontsize=8,color="#8b36d9")
@@ -970,9 +1008,11 @@ elif st.session_state.page == "Simulator":
                         force_signed, moment_A_signed, _ = distributed_load_integrals(load)
                         resultant = abs(force_signed)
                         centroid = moment_A_signed/force_signed if abs(force_signed) > 1e-12 else (load["a"]+load["b"])/2
-                        if load["type"] == "triangular":
+                        if load["type"] in ("triangular", "triangular_increasing", "triangular_decreasing"):
                             st.latex(r"W=\frac{1}{2}w_{max}L")
                             st.write(f"Load {load_index+1} (triangular): resultant = {resultant:.3f} kN, centroid at x = {centroid:.3f} m from A.")
+                        elif load["type"] == "tent":
+                            st.write(f"Load {load_index+1} (tent-shaped): integrated resultant = {resultant:.3f} kN, centroid at x = {centroid:.3f} m from A. The two triangular halves are calculated separately.")
                         else:
                             st.latex(r"W=wL")
                             st.write(f"Load {load_index+1} (rectangular): resultant = {resultant:.3f} kN, centroid at x = {centroid:.3f} m from A.")
@@ -1038,5 +1078,3 @@ elif st.session_state.page == "Contact":
         with col:
             st.markdown(f'<div class="panel"><div style="font-size:30px;color:#0752b5">◉</div><div class="panel-title">{creator["name"]}</div><b>{creator["role"]}</b><p class="small-note">{creator["email"]}</p></div>',unsafe_allow_html=True)
     st.info("To personalize this page, edit CONTACT_CREATORS near the top of beamstat_app.py.")
-
-
