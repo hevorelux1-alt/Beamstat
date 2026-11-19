@@ -18,14 +18,14 @@ DARK_LOGO_PATH = BASE / "comprog (3).png"
 HERO_PATH = BASE / "COMPROG.jpg"       # original BeamStat construction hero image
 
 CONTACT_CREATORS = [
-    {"name": "Ramirez, John Emmanuel", "role": "Project Team Member", "email": "johnemmanuelr1@gmail.com"},
-    {"name": "Creator 2", "role": "Project Team Member", "email": "Add contact details"},
-    {"name": "Creator 3", "role": "Project Team Member", "email": "Add contact details"},
-    {"name": "Creator 4", "role": "Project Team Member", "email": "Add contact details"},
-    {"name": "Creator 5", "role": "Project Team Member", "email": "Add contact details"},
-    {"name": "Creator 6", "role": "Project Team Member", "email": "Add contact details"},
-    {"name": "Creator 7", "role": "Project Team Member", "email": "Add contact details"},
-    {"name": "Creator 8", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Ramirez, John Emmanuel", "role": "Project Manager & Workflow lead", "email": "johnemmanuelr1@gmail.com"},
+    {"name": "Lagunzad, John Roldan", "role": "Project Manager & Workflow lead "email": "Add contact details"},
+    {"name": "Miranda, Chester Kyle", "role": "CE Technical Specialist / Formulas Analys", "email": "Add contact details"},
+    {"name": "Lahora, Jasmine Blythe", "role": "CE Technical Specialist / Formulas Analys", "email": "Add contact details"},
+    {"name": "Bullon, Ella", "role": "UI/UX Designer", "email": "bullonella023@gmail.com"},
+    {"name": "Reago, Princess Camille T. ", "role": "Quality Assurance & Testing Engineer", "email": "camillereago25@gmail.com"},
+    {"name": "Benavidez, Rued Aeislley", "role": "Data & I/O Integration Specialist", "email": "Add contact details"},
+    {"name": "Darilag, Rizza Joy C. ", "role": "Documentation & Presentation Lead", "email": "rizzajoydarilag@gmail.com"},
 ]
 
 def image_to_base64(path):
