@@ -321,18 +321,175 @@ body[data-theme="dark"] .stApp .stButton > button[kind="primary"]:hover {
 .stApp [data-testid="stFormSubmitButton"] button * {
   color: #FFFFFF !important;
 }
-/* FIX: FOLLOW STREAMLIT'S ACTIVE THEME */
-.stApp {
-    --bs-bg: var(--background-color, #ffffff);
-    --bs-secondary: var(--secondary-background-color, #EFF3FF);
-    --bs-readable: var(--text-color, #000000);
-    --bs-border: color-mix(in srgb, var(--bs-readable) 20%, transparent);
 
-    background: var(--bs-bg) !important;
-    color: var(--bs-readable) !important;
-}
+</style>
+""", unsafe_allow_html=True)
 
-/* Main backgrounds */
+# A final theme-aware layer. Streamlit exposes its active theme colors as CSS
+# variables on the app; the fallback colors cover versions where they are absent.
+_THEME_BASE = (st.get_option("theme.base") or "light").lower()
+_DARK_FALLBACK = _THEME_BASE == "dark"
+if _DARK_FALLBACK:
+    _FALLBACK_BG = "#101827"
+    _FALLBACK_SECONDARY = "#1B2A40"
+    _FALLBACK_TEXT = "#EFF3FF"
+    _FALLBACK_MUTED = "#C6DBEF"
+else:
+    _FALLBACK_BG = "#FFFFFF"
+    _FALLBACK_SECONDARY = "#EFF3FF"
+    _FALLBACK_TEXT = "#000000"
+    _FALLBACK_MUTED = "#334155"
+
+st.markdown(f"""
+<style>
+/* ================= FINAL BEAMSTAT THEME FIX ================= */
+.stApp {{
+  --bs-bg: var(--background-color, {_FALLBACK_BG});
+  --bs-secondary: var(--secondary-background-color, {_FALLBACK_SECONDARY});
+  --bs-text: var(--text-color, {_FALLBACK_TEXT});
+  --bs-muted: color-mix(in srgb, var(--bs-text) 76%, transparent);
+  --bs-border: color-mix(in srgb, var(--bs-text) 24%, transparent);
+  --bs-accent: #3182BD;
+  background: var(--bs-bg) !important;
+  color: var(--bs-text) !important;
+}}
+
+/* App canvas and all standard text surfaces */
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"],
+[data-testid="stHeader"] {{
+  background-color: var(--bs-bg) !important;
+  color: var(--bs-text) !important;
+}}
+.stApp h1, .stApp h2, .stApp h3, .stApp h4,
+.stApp p, .stApp li, .stApp label, .stApp small,
+.stApp [data-testid="stMarkdownContainer"],
+.stApp [data-testid="stWidgetLabel"],
+.stApp [data-testid="stCaptionContainer"],
+.stApp [data-testid="stExpander"] summary,
+.stApp [data-testid="stExpander"] summary span {{
+  color: var(--bs-text) !important;
+  opacity: 1 !important;
+}}
+
+/* Custom BeamStat cards */
+.stApp .panel, .stApp .metric-card,
+.stApp [data-testid="stVerticalBlockBorderWrapper"],
+.stApp [data-testid="stExpander"] {{
+  background: var(--bs-secondary) !important;
+  color: var(--bs-text) !important;
+  border-color: var(--bs-border) !important;
+}}
+.stApp .panel-title, .stApp .metric-label,
+.stApp .metric-unit, .stApp .small-note {{
+  color: var(--bs-text) !important;
+}}
+.stApp .metric-value, .stApp .hero-title, .stApp .eyebrow {{
+  color: var(--bs-accent) !important;
+}}
+.stApp .hero-tag, .stApp .hero-desc, .stApp .section-title {{
+  color: var(--bs-text) !important;
+}}
+
+/* Text, number, and select inputs: readable text on a matching surface */
+.stApp input, .stApp textarea,
+.stApp [data-baseweb="input"] > div,
+.stApp [data-baseweb="textarea"] > div,
+.stApp [data-baseweb="select"] > div,
+.stApp [data-testid="stNumberInput"] input,
+.stApp [data-testid="stTextInput"] input {{
+  background-color: var(--bs-secondary) !important;
+  color: var(--bs-text) !important;
+  -webkit-text-fill-color: var(--bs-text) !important;
+  border-color: var(--bs-border) !important;
+  caret-color: var(--bs-text) !important;
+  opacity: 1 !important;
+}}
+.stApp input::placeholder, .stApp textarea::placeholder {{
+  color: var(--bs-muted) !important;
+  -webkit-text-fill-color: var(--bs-muted) !important;
+  opacity: 1 !important;
+}}
+.stApp [data-baseweb="select"] *,
+.stApp [role="listbox"] *, .stApp [role="option"] {{
+  color: var(--bs-text) !important;
+}}
+.stApp [data-baseweb="popover"],
+.stApp [data-baseweb="menu"] {{
+  background: var(--bs-secondary) !important;
+}}
+
+/* Number-input stepper controls */
+.stApp [data-testid="stNumberInput"] button {{
+  background: var(--bs-secondary) !important;
+  color: var(--bs-text) !important;
+  border-color: var(--bs-border) !important;
+}}
+
+/* Buttons: blue primary action with white text; other buttons follow theme */
+.stApp .stButton > button {{
+  color: var(--bs-text) !important;
+  border-color: var(--bs-border) !important;
+}}
+.stApp .stButton > button[kind="primary"],
+.stApp [data-testid="stFormSubmitButton"] button {{
+  background: #08519C !important;
+  color: #FFFFFF !important;
+  border: 1px solid #08519C !important;
+}}
+.stApp .stButton > button[kind="primary"] *,
+.stApp [data-testid="stFormSubmitButton"] button * {{
+  color: #FFFFFF !important;
+}}
+
+/* Alerts, separators, and tables */
+.stApp [data-testid="stAlert"],
+.stApp [data-testid="stMetric"] {{
+  color: var(--bs-text) !important;
+}}
+.stApp hr, .stApp table, .stApp th, .stApp td {{
+  border-color: var(--bs-border) !important;
+  color: var(--bs-text) !important;
+}}
+.stApp a {{ color: #3182BD !important; }}
+.stApp .navline {{ border-color: var(--bs-border) !important; }}
+
+/* Dark mode: explicitly override legacy white backgrounds and black text. */
+[data-theme="dark"] .stApp,
+html[data-theme="dark"] .stApp,
+body[data-theme="dark"] .stApp {{
+  --bs-bg: #101827;
+  --bs-secondary: #1B2A40;
+  --bs-text: #EFF3FF;
+  --bs-muted: #C6DBEF;
+  --bs-border: #49677F;
+  --bs-accent: #9ECAE1;
+}}
+[data-theme="dark"] .stApp .hero-photo:before,
+html[data-theme="dark"] .stApp .hero-photo:before,
+body[data-theme="dark"] .stApp .hero-photo:before {{
+  background: linear-gradient(90deg, rgba(16,24,39,.98) 0%,
+    rgba(16,24,39,.82) 8%, rgba(16,24,39,.18) 48%, transparent 72%) !important;
+}}
+
+/* Also respect operating-system dark mode when Streamlit theme is set to Auto. */
+@media (prefers-color-scheme: dark) {{
+  html:not([data-theme="light"]) .stApp {{
+    --bs-bg: #101827;
+    --bs-secondary: #1B2A40;
+    --bs-text: #EFF3FF;
+    --bs-muted: #C6DBEF;
+    --bs-border: #49677F;
+    --bs-accent: #9ECAE1;
+  }}
+  html:not([data-theme="light"]) .stApp .hero-photo:before {{
+    background: linear-gradient(90deg, rgba(16,24,39,.98) 0%,
+      rgba(16,24,39,.82) 8%, rgba(16,24,39,.18) 48%, transparent 72%) !important;
+  }}
+}}
+/* ============================================================= */
 </style>
 """, unsafe_allow_html=True)
 
@@ -641,7 +798,11 @@ elif st.session_state.page == "Simulator":
 
                 st.markdown('<div class="panel-title" style="margin-top:16px">✎  Beam Diagram</div>',unsafe_allow_html=True)
                 fig, ax = plt.subplots(figsize=(11, 3.8))
-                fig.patch.set_facecolor("white")
+                chart_dark = _DARK_FALLBACK
+                chart_bg = "#101827" if chart_dark else "#FFFFFF"
+                chart_fg = "#EFF3FF" if chart_dark else "#173B5E"
+                fig.patch.set_facecolor(chart_bg)
+                ax.set_facecolor(chart_bg)
                 ax.plot([0,L],[0,0],color="#263b5a",lw=7,solid_capstyle="round",zorder=3)
                 for support_index, reaction in enumerate(support_reactions):
                     sx, kind, label = reaction["x"], reaction["type"], reaction["label"]
@@ -678,6 +839,7 @@ elif st.session_state.page == "Simulator":
                 ax.annotate("",xy=(L,-1.12),xytext=(0,-1.12),arrowprops=dict(arrowstyle="<->",color="#64748b"))
                 ax.text(L/2,-1.25,f"L = {L:.2f} m",ha="center",fontsize=8,color="#475569")
                 ax.set_xlim(-.45,L+.45); ax.set_ylim(-1.48,1.08); ax.axis("off")
+                ax.tick_params(colors=chart_fg)
                 st.pyplot(fig,use_container_width=True)
                 plt.close(fig)
 
@@ -756,4 +918,5 @@ elif st.session_state.page == "Contact":
         with col:
             st.markdown(f'<div class="panel"><div style="font-size:30px;color:#0752b5">◉</div><div class="panel-title">{creator["name"]}</div><b>{creator["role"]}</b><p class="small-note">{creator["email"]}</p></div>',unsafe_allow_html=True)
     st.info("To personalize this page, edit CONTACT_CREATORS near the top of beamstat_app.py.")
+
 
