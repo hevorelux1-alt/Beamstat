@@ -18,9 +18,14 @@ DARK_LOGO_PATH = BASE / "comprog (3).png"
 HERO_PATH = BASE / "COMPROG.jpg"       # original BeamStat construction hero image
 
 CONTACT_CREATORS = [
-    {"name": "Creator 1", "role": "Project Lead / Developer", "email": "Add contact details"},
+    {"Ramirez, John Emmanuel": "Creator 1", "role": "Project Lead / Developer", "email": "johnemmanuelr1@gmail.com"},
     {"name": "Creator 2", "role": "UI/UX Designer", "email": "Add contact details"},
     {"name": "Creator 3", "role": "Engineering Researcher", "email": "Add contact details"},
+    {"name": "Creator 3", "role": "Engineering Researcher", "email": "Add contact details"},
+    {"name": "Creator 3", "role": "Engineering Researcher", "email": "Add contact details"},
+    {"name": "Creator 3", "role": "Engineering Researcher", "email": "Add contact details"},
+    {"name": "Creator 3", "role": "Engineering Researcher", "email": "Add contact details"},
+    {"name": "Creator 3", "role": "Engineering Researcher", "email": "Add contact details"}
 ]
 
 def image_to_base64(path):
