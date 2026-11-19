@@ -13,19 +13,19 @@ from PIL import Image
 st.set_page_config(page_title="BeamStat | Beam Analysis Simulator", page_icon="🏗️", layout="wide")
 BASE = Path(__file__).resolve().parent
 LOGO_PATH = BASE / "COMPROG.png"       # legacy/fallback logo
-LIGHT_LOGO_PATH = BASE / "comprog (2).png"
-DARK_LOGO_PATH = BASE / "comprog (3).png"
+LIGHT_LOGO_PATH = BASE / "logo_light.png"
+DARK_LOGO_PATH = BASE / "logo_dark.png"
 HERO_PATH = BASE / "COMPROG.jpg"       # original BeamStat construction hero image
 
 CONTACT_CREATORS = [
-    {"name": "Ramirez, John Emmanuel", "role": "Project Manager & Workflow lead", "email": "johnemmanuelr1@gmail.com"},
-    {"name": "Lagunzad, John Roldan", "role": "Project Manager & Workflow Lead", "email": "lagunzad.johnroldan.ce@gmail.com"},
-    {"name": "Miranda, Chester Kyle", "role": "CE Technical Specialist / Formulas Analys", "email": "Add contact details"},
-    {"name": "Lahora, Jasmine Blythe", "role": "CE Technical Specialist / Formulas Analys", "email": "Add contact details"},
-    {"name": "Bullon, Ella", "role": "UI/UX Designer", "email": "bullonella023@gmail.com"},
-    {"name": "Reago, Princess Camille T. ", "role": "Quality Assurance & Testing Engineer", "email": "camillereago25@gmail.com"},
-    {"name": "Benavidez, Rued Aeislley", "role": "Data & I/O Integration Specialist", "email": "Add contact details"},
-    {"name": "Darilag, Rizza Joy C. ", "role": "Documentation & Presentation Lead", "email": "rizzajoydarilag@gmail.com"},
+    {"name": "Creator 1", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 2", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 3", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 4", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 5", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 6", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 7", "role": "Project Team Member", "email": "Add contact details"},
+    {"name": "Creator 8", "role": "Project Team Member", "email": "Add contact details"},
 ]
 
 def image_to_base64(path):
@@ -554,8 +554,27 @@ for col, label in zip(nav_cols[1:], ["HOME", "SIMULATOR", "ABOUT", "CONTACT"]):
     with col:
         if st.button(label, key=f"nav_{label}", use_container_width=True):
             st.session_state.page = {"HOME":"Home","SIMULATOR":"Simulator","ABOUT":"About","CONTACT":"Contact"}[label]
+            st.session_state["_beamstat_nav_fade"] = True
             st.rerun()
 st.markdown('<div class="navline"></div>', unsafe_allow_html=True)
+
+# Apply the page transition only after a navigation action. Ordinary widget
+# changes (such as editing loads or calculating reactions) will not replay it.
+if st.session_state.pop("_beamstat_nav_fade", False):
+    st.markdown("""
+    <style>
+    @keyframes beamstatPageFade {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    div[data-testid="stMainBlockContainer"] {
+      animation: beamstatPageFade 480ms ease-out both;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      div[data-testid="stMainBlockContainer"] { animation: none !important; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 
 def distributed_intensity(load, x):
@@ -696,6 +715,7 @@ if st.session_state.page == "Home":
     with action_cols[0]:
         if st.button("▶  Simulate Here", key="home_simulate", type="primary", use_container_width=True):
             st.session_state.page = "Simulator"
+            st.session_state["_beamstat_nav_fade"] = True
             st.rerun()
     with action_cols[1]:
         if st.button("How It Works", key="home_how", use_container_width=True):
@@ -1092,3 +1112,4 @@ elif st.session_state.page == "Contact":
                     f'</div>',
                     unsafe_allow_html=True,
                 )
+    st.info("To personalize this page, edit the eight entries in CONTACT_CREATORS near the top of this Python file.")
