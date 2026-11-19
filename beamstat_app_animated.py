@@ -24,7 +24,7 @@ CONTACT_CREATORS = [
     {"name": "Lahora, Jasmine Blythe", "role": "CE Technical Specialist / Formulas Analys", "email": "jlahora11@gmail.com"},
     {"name": "Bullon, Ella", "role": "UI/UX Designer", "email": "bullonella023@gmail.com"},
     {"name": "Reago, Princess Camille T. ", "role": "Quality Assurance & Testing Engineer", "email": "camillereago25@gmail.com"},
-    {"name": "Benavidez, Rued Aeislley", "role": "Data & I/O Integration Specialist", "email": "Add contact details"},
+    {"name": "Benavidez, Rued Aeislley", "role": "Data & I/O Integration Specialist", "email": "Ruedaeislley@gmail.com"},
     {"name": "Darilag, Rizza Joy C. ", "role": "Documentation & Presentation Lead", "email": "rizzajoydarilag@gmail.com"},
 ]
 
