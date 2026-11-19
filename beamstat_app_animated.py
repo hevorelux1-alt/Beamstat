@@ -204,28 +204,77 @@ elif st.session_state.page == "Simulator":
         st.markdown('<div class="panel-title">⚙️  1. Beam Configuration</div>', unsafe_allow_html=True)
         L = st.number_input("Total beam length L (m)", min_value=0.1, value=8.0, step=0.5, key="beam_length_multi")
         st.markdown("**2. Supports (minimum 2)**")
-        st.caption("Enter each support's distance from the left end A. Add or remove rows as needed.")
-        import pandas as pd
-        if "support_table_multi" not in st.session_state:
-            st.session_state.support_table_multi = pd.DataFrame([
-                {"Label": "A", "Distance from A (m)": 0.0, "Support type": "Pin"},
-                {"Label": "D", "Distance from A (m)": 6.5, "Support type": "Roller"},
-            ])
-        # Keep default support positions within the current span.
-        initial_supports = st.session_state.support_table_multi.copy()
-        initial_supports["Distance from A (m)"] = initial_supports["Distance from A (m)"].clip(lower=0, upper=float(L))
-        edited_supports = st.data_editor(
-            initial_supports, key="support_table_editor_multi", num_rows="dynamic", use_container_width=True,
-            column_config={
-                "Label": st.column_config.TextColumn("Label (e.g. A, D)"),
-                "Distance from A (m)": st.column_config.NumberColumn("Distance from A (m)", min_value=0.0, max_value=float(L), step=0.5, format="%.2f m"),
-                "Support type": st.column_config.SelectboxColumn("Support type", options=["Pin", "Roller", "Fixed"], required=True),
-            },
-            hide_index=True
-        )
-        st.session_state.support_table_multi = edited_supports.copy()
+        st.caption("Click Add Support, then choose its support type and enter its distance from the left end of the beam.")
+        if "beamstat_support_rows" not in st.session_state:
+            st.session_state.beamstat_support_rows = [
+                {"uid": "A", "label": "A", "x": 0.0, "type": "Pin"},
+                {"uid": "B", "label": "B", "x": min(6.5, float(L)), "type": "Roller"},
+            ]
+        if "beamstat_support_counter" not in st.session_state:
+            st.session_state.beamstat_support_counter = 0
+        if st.button("＋ Add Support", key="add_beam_support", use_container_width=True):
+            next_index = len(st.session_state.beamstat_support_rows)
+            next_label = chr(65 + next_index) if next_index < 26 else f"S{next_index+1}"
+            new_uid = f"support_new_{st.session_state.beamstat_support_counter}"
+            st.session_state.beamstat_support_counter += 1
+            st.session_state.beamstat_support_rows.append({
+                "uid": new_uid,
+                "label": next_label,
+                "x": round(float(L) * 0.5, 2),
+                "type": "Roller",
+            })
+            st.rerun()
 
-        st.markdown("**3. Applied Point Loads**")
+        support_rows_for_solver = []
+        for i, support in enumerate(st.session_state.beamstat_support_rows):
+            with st.container(border=True):
+                st.markdown(f"**Support {i+1}**")
+                c_label, c_pos, c_type, c_remove = st.columns([0.8, 1.35, 1.1, 0.65])
+                with c_label:
+                    label = st.text_input("Label", value=support["label"], key=f"support_label_{support['uid']}", max_chars=8)
+                with c_pos:
+                    x_value = min(max(float(support["x"]), 0.0), float(L))
+                    x = st.number_input("Distance from A (m)", min_value=0.0, max_value=float(L), value=x_value, step=0.5, key=f"support_x_{support['uid']}")
+                with c_type:
+                    support_type = st.selectbox("Support type", ["Pin", "Roller", "Fixed"], index=["Pin", "Roller", "Fixed"].index(support["type"]), key=f"support_type_{support['uid']}")
+                with c_remove:
+                    st.write("")
+                    st.write("")
+                    remove_clicked = st.button("✕", key=f"remove_support_{support['uid']}", disabled=len(st.session_state.beamstat_support_rows) <= 2, help="Remove this support (at least two are required)")
+                support_rows_for_solver.append({"Label": label, "Distance from A (m)": x, "Support type": support_type})
+                if remove_clicked:
+                    st.session_state.beamstat_support_rows.pop(i)
+                    st.rerun()
+        import pandas as pd
+        edited_supports = pd.DataFrame(support_rows_for_solver)
+
+        st.markdown("**3. Analysis Points (with or without supports)**")
+        st.caption("These are locations where BeamStat reports internal shear and bending moment. A point does not need to have a support.")
+        if "beamstat_analysis_points" not in st.session_state:
+            st.session_state.beamstat_analysis_points = [
+                {"label": "A", "x": 0.0}, {"label": "B", "x": 2.0},
+                {"label": "C", "x": 4.0}, {"label": "D", "x": min(6.5, float(L))}
+            ]
+        if st.button("＋ Add Analysis Point", key="add_analysis_point", use_container_width=True):
+            idx = len(st.session_state.beamstat_analysis_points)
+            st.session_state.beamstat_analysis_points.append({"label": chr(65+idx) if idx < 26 else f"P{idx+1}", "x": round(float(L)*0.5, 2)})
+            st.rerun()
+        analysis_points = []
+        for i, point in enumerate(st.session_state.beamstat_analysis_points):
+            with st.container(border=True):
+                pc1, pc2, pc3 = st.columns([0.8, 1.3, 0.6])
+                with pc1:
+                    point_label = st.text_input("Point label", value=point["label"], key=f"analysis_label_{i}", max_chars=8)
+                with pc2:
+                    px = st.number_input("Distance x (m)", min_value=0.0, max_value=float(L), value=min(max(float(point["x"]), 0.0), float(L)), step=0.5, key=f"analysis_x_{i}")
+                with pc3:
+                    st.write("")
+                    if st.button("✕", key=f"remove_analysis_{i}", disabled=len(st.session_state.beamstat_analysis_points) <= 1):
+                        st.session_state.beamstat_analysis_points.pop(i)
+                        st.rerun()
+                analysis_points.append({"label": point_label.strip() or f"P{i+1}", "x": float(px)})
+
+        st.markdown("**4. Applied Point Loads**")
         point_count = st.number_input("Number of point loads", min_value=0, max_value=10, value=2, step=1, key="point_load_count_multi")
         point_loads = []
         for i in range(int(point_count)):
@@ -237,14 +286,14 @@ elif st.session_state.page == "Simulator":
                     x = st.number_input(f"Position x{i+1} (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"multi_x_{i}")
                 point_loads.append((p, x))
 
-        st.markdown("**4. Uniformly Distributed Load (UDL)**")
+        st.markdown("**5. Uniformly Distributed Load (UDL)**")
         w = st.number_input("UDL intensity w (kN/m)", min_value=0.0, value=0.0, step=1.0, key="multi_udl_w")
         ua, ub = st.columns(2)
         with ua:
             udl_a = st.number_input("Start a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key="multi_udl_a")
         with ub:
             udl_b = st.number_input("End b (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key="multi_udl_b")
-        st.markdown("**5. Applied Moment**")
+        st.markdown("**6. Applied Moment**")
         moment = st.number_input("Moment M at beam midpoint (kN·m; CCW positive)", value=0.0, step=1.0, key="multi_moment")
         EI = 20000.0  # Internal constant used by the solver.
         calculate = st.button("▦  Calculate Reactions  →", use_container_width=True, type="primary", key="multi_calculate")
@@ -289,7 +338,40 @@ elif st.session_state.page == "Simulator":
                             + (f'<div class="metric-unit">M{reaction["label"]} = {reaction["M"]:.3f} kN·m</div>' if reaction["type"] == "Fixed" else "")
                             + '</div>', unsafe_allow_html=True)
 
-                st.markdown('<div class="panel-title" style="margin-top:16px">✎  Beam Diagram</div>', unsafe_allow_html=True)
+                # Internal section actions at every requested coordinate (support or no support).
+                st.markdown('<div class="panel-title" style="margin-top:18px">⌖  Results at Analysis Points</div>', unsafe_allow_html=True)
+                section_results = []
+                for point in analysis_points:
+                    xsec = point["x"]
+                    # Use the left-hand section convention. Loads exactly at the cut are excluded;
+                    # users can inspect the point immediately to either side by adjusting x slightly.
+                    Vsec = sum(r["Ry"] for r in support_reactions if r["x"] < xsec - 1e-9)
+                    Msec = sum(r["Ry"] * (xsec-r["x"]) for r in support_reactions if r["x"] < xsec - 1e-9)
+                    Msec -= sum(p * (xsec-xp) for p, xp in point_loads if xp < xsec - 1e-9)
+                    Msec += sum(r["M"] for r in support_reactions if r["x"] < xsec - 1e-9) * -1.0
+                    udl_left = max(0.0, min(xsec, float(udl_b)) - float(udl_a)) if xsec > float(udl_a) else 0.0
+                    if float(w) > 0 and udl_left > 0:
+                        udl_resultant = float(w) * udl_left
+                        udl_centroid_left = float(udl_a) + udl_left/2
+                        Vsec -= udl_resultant
+                        Msec -= udl_resultant * (xsec-udl_centroid_left)
+                    if xsec > float(L)/2 + 1e-9:
+                        Msec -= float(moment)
+                    has_support = any(abs(r["x"]-xsec) < 1e-7 for r in support_reactions)
+                    section_results.append({"label": point["label"], "x": xsec, "V": Vsec, "M": Msec, "has_support": has_support})
+                section_cols = st.columns(min(3, max(1, len(section_results))))
+                for i, result in enumerate(section_results):
+                    with section_cols[i % len(section_cols)]:
+                        status = "Support location" if result["has_support"] else "No support · section only"
+                        st.markdown(
+                            f'<div class="metric-card"><div class="metric-label">Point {result["label"]} · x = {result["x"]:.2f} m</div>'
+                            f'<div class="metric-unit">{status}</div>'
+                            f'<div class="metric-value">V = {result["V"]:.3f} kN</div>'
+                            f'<div class="metric-unit">Internal shear force</div>'
+                            f'<div class="metric-value">M = {result["M"]:.3f} kN·m</div>'
+                            f'<div class="metric-unit">Internal bending moment</div></div>', unsafe_allow_html=True)
+
+                st.markdown('<div class="panel-title" style="margin-top:16px">✎  Beam Diagram</div>',unsafe_allow_html=True)
                 fig, ax = plt.subplots(figsize=(11, 3.8))
                 fig.patch.set_facecolor("white")
                 ax.plot([0,L],[0,0],color="#263b5a",lw=7,solid_capstyle="round",zorder=3)
@@ -309,6 +391,10 @@ elif st.session_state.page == "Simulator":
                     ax.text(sx,-.48,f"{label} · {kind}",ha="center",fontsize=8,color="#173b70")
                     if reaction["type"] == "Fixed" and abs(reaction["M"]) > 1e-8:
                         ax.text(sx,.48,f"M{label}={reaction['M']:.2f} kN·m",ha="center",fontsize=8,color="#8b36d9")
+                for point in analysis_points:
+                    px = point["x"]
+                    ax.axvline(px, ymin=.28, ymax=.72, color="#94a3b8", lw=1, ls="--", alpha=.8, zorder=1)
+                    ax.text(px, .16, point["label"], ha="center", va="bottom", fontsize=8, color="#7c3aed", fontweight="bold")
                 for i, (p,x) in enumerate(point_loads):
                     if p > 0:
                         ax.annotate("",xy=(x,.04),xytext=(x,.78),arrowprops=dict(arrowstyle="-|>",color="#e13b32",lw=2))
@@ -349,7 +435,7 @@ elif st.session_state.page == "Simulator":
             except (np.linalg.LinAlgError, ValueError, KeyError, TypeError) as exc:
                 st.error(f"Unable to solve this support arrangement: {exc}")
         else:
-            st.info("Add at least two supports, set their distances from A, enter any loads, then click **Calculate Reactions**. All load values default to zero.")
+            st.info("Add at least two supports, add any analysis points (including points without supports), enter loads, then click **Calculate Reactions**. Load values default to zero.")
 
 elif st.session_state.page == "About":
     st.markdown('<h1 class="section-title">About BeamStat</h1>',unsafe_allow_html=True)
@@ -369,7 +455,7 @@ elif st.session_state.page == "About":
       <li><b>Point loads:</b> Add up to ten downward point loads and set each load's position along the beam.</li>
       <li><b>Uniformly distributed load:</b> Set the load intensity and the start/end positions. BeamStat converts it to an equivalent resultant force at the load's centroid.</li>
       <li><b>Applied couple:</b> Add a counterclockwise-positive moment at midspan.</li>
-      <li><b>Reaction results:</b> View vertical reactions at both ends and reaction moments at fixed supports.</li>
+      <li><b>Reaction and section results:</b> View support reactions and internal shear force and bending moment at any labeled analysis point, including locations without supports.</li>
       <li><b>Beam diagram:</b> See the selected supports, applied loads, UDL, applied moment, and reaction labels.</li>
       <li><b>Equilibrium check:</b> Review the vertical-force and moment residuals to check overall equilibrium.</li>
       <li><b>Step-by-step details:</b> Inspect the equivalent UDL calculation, stiffness-model setup, support restraints, reactions, and verification.</li>
@@ -402,4 +488,3 @@ elif st.session_state.page == "Contact":
         with col:
             st.markdown(f'<div class="panel"><div style="font-size:30px;color:#0752b5">◉</div><div class="panel-title">{creator["name"]}</div><b>{creator["role"]}</b><p class="small-note">{creator["email"]}</p></div>',unsafe_allow_html=True)
     st.info("To personalize this page, edit CONTACT_CREATORS near the top of beamstat_app.py.")
-
