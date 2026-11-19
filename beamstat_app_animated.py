@@ -1112,4 +1112,4 @@ elif st.session_state.page == "Contact":
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-    st.info("To personalize this page, edit the eight entries in CONTACT_CREATORS near the top of this Python file.")
+    st.info("Proffesor: Engr. Ella Kristina Delima")
