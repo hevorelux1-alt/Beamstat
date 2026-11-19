@@ -1112,4 +1112,4 @@ elif st.session_state.page == "Contact":
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-    st.info("Proffesor: Engr. Ella Kristina Delima")
+    st.info("Professor: Engr. Ella Kristina Delima")
