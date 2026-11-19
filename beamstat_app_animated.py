@@ -614,5 +614,4 @@ elif st.session_state.page == "Contact":
     st.markdown('<h1 class="section-title">Meet the Creators</h1>',unsafe_allow_html=True)
     st.write("BeamStat is a student-developed simulation project. Replace the sample entries below with your team's actual names and contact information.")
     cols = st.columns(len(CONTACT_CREATORS))
-    for col, creator in zip(cols, CONTACT_CREATORS):
        
