@@ -78,7 +78,7 @@ div.stButton>button:hover{color:var(--blue)!important;border-bottom:2px solid va
 }
 .section-title{font-size:27px;font-weight:800;color:var(--navy);margin:.2rem 0 1rem}
 .panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:15px 16px;margin-bottom:12px;box-shadow:0 2px 10px rgba(15,65,130,.025)}
-.panel-title{font-size:35px;font-weight:800;color:var(--navy);margin-bottom:10px}
+.panel-title{font-size:16px;font-weight:800;color:var(--navy);margin-bottom:10px}
 .metric-card{background:linear-gradient(145deg,#f7faff,#edf5ff);border:1px solid #e0ebfa;border-radius:10px;padding:12px 14px;min-height:90px}
 .metric-label{font-size:12px;color:#23416d;font-weight:700}.metric-value{font-size:22px;color:#064bb0;font-weight:800;margin-top:4px}.metric-unit{font-size:11px;color:#64748b}
 .small-note{font-size:12px;color:#64748b}
