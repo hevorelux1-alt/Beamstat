@@ -23,7 +23,7 @@ CONTACT_CREATORS = [
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Poppins:wght@500;600;700;800;900&display=swap');
-:root{--blue:#0752b5;--navy:#102c61;--pale:#f4f8ff;--line:#dce8f8;--muted:#64748b}
+:root{--blue:#08519C;--navy:#173B5E;--pale:#EFF3FF;--line:#C6DBEF;--muted:#49677F;--palette-1:#EFF3FF;--palette-2:#C6DBEF;--palette-3:#9ECAE1;--palette-4:#6BAED6;--palette-5:#3182BD;--palette-6:#08519C}
 html,body,[class*="css"]{font-family:'Inter',sans-serif}
 .stApp{background:#fff;color:#10213d}
 .block-container{max-width:1500px;padding-top:1.1rem;padding-bottom:2rem}
@@ -75,7 +75,7 @@ div[data-testid="stSelectbox"] label,div[data-testid="stNumberInput"] label{font
   --bs-text: var(--text-color, #172033);
   --bs-muted: color-mix(in srgb, var(--bs-text) 68%, transparent);
   --bs-border: color-mix(in srgb, var(--bs-text) 18%, transparent);
-  --bs-blue: #3985ed;
+  --bs-blue: #3182BD;
   --bs-panel: var(--secondary-background-color, #f7faff);
 }
 .stApp, [data-testid="stAppViewContainer"] {
@@ -194,6 +194,102 @@ div[data-testid="stImage"] img { max-width: 100%; height: auto; }
 @media (max-width: 760px) {
   div[data-testid="stImage"] img { max-width: 118px; }
 }
+
+
+/* ================= BEAMSTAT PALETTE + HIGH-CONTRAST CONTROLS ================= */
+:root {
+  --bs-palette-1: #EFF3FF;
+  --bs-palette-2: #C6DBEF;
+  --bs-palette-3: #9ECAE1;
+  --bs-palette-4: #6BAED6;
+  --bs-palette-5: #3182BD;
+  --bs-palette-6: #08519C;
+  --bs-action: #08519C;
+  --bs-action-hover: #3182BD;
+}
+.stApp {
+  --bs-readable: var(--text-color, #173B5E);
+}
+.stApp [data-testid="stExpander"] summary,
+.stApp [data-testid="stExpander"] summary *,
+.stApp [data-testid="stWidgetLabel"],
+.stApp [data-testid="stWidgetLabel"] *,
+.stApp label,
+.stApp .stMarkdown,
+.stApp .stMarkdown p,
+.stApp .stMarkdown li,
+.stApp [data-testid="stCaptionContainer"],
+.stApp [data-testid="stCaptionContainer"] *,
+.stApp [data-testid="stNumberInput"] *,
+.stApp [data-testid="stTextInput"] *,
+.stApp [data-testid="stSelectbox"] *,
+.stApp [data-testid="stMultiSelect"] * {
+  color: var(--bs-readable) !important;
+  opacity: 1 !important;
+}
+.stApp [data-testid="stExpander"] summary {
+  font-weight: 700 !important;
+}
+.stApp .stButton > button[kind="primary"],
+.stApp button[kind="primary"],
+.stApp [data-testid="stFormSubmitButton"] button {
+  background: var(--bs-action) !important;
+  color: #FFFFFF !important;
+  border: 1px solid var(--bs-action) !important;
+  font-weight: 800 !important;
+  opacity: 1 !important;
+}
+.stApp .stButton > button[kind="primary"] *,
+.stApp button[kind="primary"] *,
+.stApp [data-testid="stFormSubmitButton"] button * {
+  color: #FFFFFF !important;
+  opacity: 1 !important;
+}
+.stApp .stButton > button[kind="primary"]:hover,
+.stApp button[kind="primary"]:hover {
+  background: var(--bs-action-hover) !important;
+  border-color: var(--bs-action-hover) !important;
+}
+.stApp .stButton > button:not([kind="primary"]) {
+  color: var(--bs-readable) !important;
+  border-color: var(--bs-palette-2) !important;
+}
+.stApp input, .stApp textarea,
+.stApp [data-baseweb="select"] > div,
+.stApp [data-baseweb="input"] > div {
+  color: var(--bs-readable) !important;
+  caret-color: var(--bs-readable) !important;
+}
+.stApp [data-testid="stExpander"] {
+  border-color: var(--bs-palette-2) !important;
+}
+.stApp a { color: var(--bs-palette-5) !important; }
+[data-theme="light"] .stApp {
+  --bs-readable: #173B5E;
+  --bs-action: #08519C;
+  --bs-action-hover: #3182BD;
+}
+[data-theme="dark"] .stApp,
+body[data-theme="dark"] .stApp {
+  --bs-readable: #EFF3FF;
+  --bs-action: #3182BD;
+  --bs-action-hover: #6BAED6;
+}
+[data-theme="dark"] .stApp .stButton > button[kind="primary"]:hover,
+body[data-theme="dark"] .stApp .stButton > button[kind="primary"]:hover {
+  color: #102B45 !important;
+}
+[data-theme="dark"] .stApp .stButton > button[kind="primary"]:hover * {
+  color: #102B45 !important;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .stApp {
+    --bs-readable: #EFF3FF;
+    --bs-action: #3182BD;
+    --bs-action-hover: #6BAED6;
+  }
+}
+/* ============================================================================ */
 
 </style>
 """, unsafe_allow_html=True)
@@ -508,15 +604,15 @@ elif st.session_state.page == "Simulator":
                 for support_index, reaction in enumerate(support_reactions):
                     sx, kind, label = reaction["x"], reaction["type"], reaction["label"]
                     if kind == "Pin":
-                        ax.scatter([sx],[-.12],marker="^",s=190,color="#0752b5",zorder=4)
-                        ax.plot([sx-.18,sx+.18],[-.25,-.25],color="#0752b5",lw=1.5)
+                        ax.scatter([sx],[-.12],marker="^",s=190,color="#08519C",zorder=4)
+                        ax.plot([sx-.18,sx+.18],[-.25,-.25],color="#08519C",lw=1.5)
                     elif kind == "Roller":
                         ax.scatter([sx],[-.10],s=105,facecolors="white",edgecolors="#0752b5",linewidths=2,zorder=4)
-                        ax.plot([sx-.22,sx+.22],[-.25,-.25],color="#0752b5",lw=1.5)
+                        ax.plot([sx-.22,sx+.22],[-.25,-.25],color="#08519C",lw=1.5)
                     else:
-                        ax.plot([sx,sx],[-.38,.27],color="#0752b5",lw=5,zorder=4)
+                        ax.plot([sx,sx],[-.38,.27],color="#08519C",lw=5,zorder=4)
                         for yy in np.linspace(-.35,.22,6):
-                            ax.plot([sx-.15,sx],[yy,yy+.08],color="#0752b5",lw=1)
+                            ax.plot([sx-.15,sx],[yy,yy+.08],color="#08519C",lw=1)
                     ax.annotate(f"R{label} = {reaction['Ry']:.2f} kN", xy=(sx,-.31), xytext=(sx,-.72-(0.22*(support_index%2))), ha="center", fontsize=8, color="#07833b")
                     ax.text(sx,-.48,f"{label} · {kind}",ha="center",fontsize=8,color="#173b70")
                     if reaction["type"] == "Fixed" and abs(reaction["M"]) > 1e-8:
@@ -530,10 +626,10 @@ elif st.session_state.page == "Simulator":
                         ax.annotate("",xy=(x,.04),xytext=(x,.78),arrowprops=dict(arrowstyle="-|>",color="#e13b32",lw=2))
                         ax.text(x,.85,f"{p:g} kN",ha="center",fontsize=8,color="#c52e28")
                 if w > 0 and udl_b > udl_a:
-                    ax.plot([udl_a,udl_b],[.46,.46],color="#1769c2",lw=1.5)
+                    ax.plot([udl_a,udl_b],[.46,.46],color="#3182BD",lw=1.5)
                     for xx in np.linspace(udl_a,udl_b,10):
-                        ax.annotate("",xy=(xx,.04),xytext=(xx,.44),arrowprops=dict(arrowstyle="-|>",color="#1769c2",lw=1))
-                    ax.text((udl_a+udl_b)/2,.54,f"w = {w:g} kN/m",ha="center",fontsize=8,color="#1769c2")
+                        ax.annotate("",xy=(xx,.04),xytext=(xx,.44),arrowprops=dict(arrowstyle="-|>",color="#3182BD",lw=1))
+                    ax.text((udl_a+udl_b)/2,.54,f"w = {w:g} kN/m",ha="center",fontsize=8,color="#3182BD")
                 if moment:
                     ax.annotate("",xy=(L/2+.25,.22),xytext=(L/2-.25,.22),arrowprops=dict(arrowstyle="->",connectionstyle="arc3,rad=-.8",color="#8b36d9",lw=2))
                     ax.text(L/2,.52,f"M = {moment:g} kN·m",ha="center",fontsize=8,color="#8b36d9")
@@ -614,4 +710,9 @@ elif st.session_state.page == "Contact":
     st.markdown('<h1 class="section-title">Meet the Creators</h1>',unsafe_allow_html=True)
     st.write("BeamStat is a student-developed simulation project. Replace the sample entries below with your team's actual names and contact information.")
     cols = st.columns(len(CONTACT_CREATORS))
+    for col, creator in zip(cols, CONTACT_CREATORS):
+        with col:
+            st.markdown(f'<div class="panel"><div style="font-size:30px;color:#0752b5">◉</div><div class="panel-title">{creator["name"]}</div><b>{creator["role"]}</b><p class="small-note">{creator["email"]}</p></div>',unsafe_allow_html=True)
+    st.info("To personalize this page, edit CONTACT_CREATORS near the top of beamstat_app.py.")
+
        
