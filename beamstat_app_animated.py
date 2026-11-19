@@ -11,7 +11,7 @@ from PIL import Image
 # -----------------------------------------------------------------------------
 st.set_page_config(page_title="BeamStat | Beam Analysis Simulator", page_icon="🏗️", layout="wide")
 BASE = Path(__file__).resolve().parent
-LOGO_PATH = BASE / "COMPROG-removebg-preview.png"       
+LOGO_PATH = BASE / "COMPROG.png"       
 HERO_PATH = BASE / "COMPROG.jpg"       # original BeamStat construction hero image
 
 CONTACT_CREATORS = [
@@ -512,45 +512,78 @@ for col, label in zip(nav_cols[1:], ["HOME", "SIMULATOR", "ABOUT", "CONTACT"]):
 st.markdown('<div class="navline"></div>', unsafe_allow_html=True)
 
 
-def solve_beam(L, supports, point_loads, udl_w, udl_a, udl_b, applied_moment, EI):
-    """Euler-Bernoulli beam FE model with any number of vertical supports.
-    Positive vertical force is upward; positive moment is counterclockwise.
-    Each support restrains vertical displacement; Fixed also restrains rotation.
+def distributed_load_integrals(load, x0=None, x1=None):
+    """Return signed force, first moment about A, and first moment about x1.
+    Load intensity is positive downward in the UI; returned force is negative
+    for downward loading and positive for upward loading.
     """
+    a, b = float(load["a"]), float(load["b"])
+    lo = a if x0 is None else max(a, float(x0))
+    hi = b if x1 is None else min(b, float(x1))
+    if hi <= lo or b <= a:
+        return 0.0, 0.0, 0.0
+    w0, w1 = float(load["w0"]), float(load["w1"])
+    direction = 1.0 if load.get("direction", "Downward") == "Upward" else -1.0
+    # Three-point Gauss-Legendre integration exactly integrates these
+    # linear-intensity force and first-moment expressions.
+    pts = np.array([-np.sqrt(3/5), 0.0, np.sqrt(3/5)])
+    weights = np.array([5/9, 8/9, 5/9])
+    xs = (hi+lo)/2 + (hi-lo)/2*pts
+    intensity = w0 + (w1-w0)*(xs-a)/(b-a)
+    signed_q = direction * intensity
+    scale = (hi-lo)/2
+    force = scale * np.sum(weights*signed_q)
+    moment_A = scale * np.sum(weights*signed_q*xs)
+    moment_cut = 0.0 if x1 is None else scale * np.sum(weights*signed_q*(float(x1)-xs))
+    return float(force), float(moment_A), float(moment_cut)
+
+
+def solve_beam(L, supports, point_loads, distributed_loads, applied_moment, EI):
+    """Euler-Bernoulli beam FE model with point and linearly varying loads."""
     support_positions = [float(s["x"]) for s in supports]
+    load_bounds = [v for load in distributed_loads for v in (float(load["a"]), float(load["b"]))]
     nodes = sorted(set([0.0, float(L)] + support_positions
-                       + [float(x) for _, x in point_loads]
-                       + [float(udl_a), float(udl_b)] + [float(L)/2]))
+                       + [float(x) for _, x in point_loads] + load_bounds + [float(L)/2]))
     n = len(nodes)
     K = np.zeros((2*n, 2*n), dtype=float)
     F = np.zeros(2*n, dtype=float)
+    gauss_pts = np.array([-np.sqrt(3/5), 0.0, np.sqrt(3/5)])
+    gauss_weights = np.array([5/9, 8/9, 5/9])
 
     for e in range(n-1):
-        le = nodes[e+1] - nodes[e]
+        xL, xR = nodes[e], nodes[e+1]
+        le = xR - xL
         if le <= 1e-10:
             continue
         ke = EI / le**3 * np.array([
-            [12, 6*le, -12, 6*le],
-            [6*le, 4*le**2, -6*le, 2*le**2],
-            [-12, -6*le, 12, -6*le],
-            [6*le, 2*le**2, -6*le, 4*le**2]
+            [12, 6*le, -12, 6*le], [6*le, 4*le**2, -6*le, 2*le**2],
+            [-12, -6*le, 12, -6*le], [6*le, 2*le**2, -6*le, 4*le**2]
         ], dtype=float)
         dofs = [2*e, 2*e+1, 2*(e+1), 2*(e+1)+1]
         K[np.ix_(dofs, dofs)] += ke
-        midpoint = (nodes[e] + nodes[e+1]) / 2
-        if udl_w > 0 and udl_b > udl_a and udl_a-1e-9 <= midpoint <= udl_b+1e-9:
-            q = -udl_w
-            F[dofs] += q * np.array([le/2, le**2/12, le/2, -le**2/12])
+        # Consistent element load vector: integrate Hermite shape functions
+        # against the actual linear intensity over this element.
+        for load in distributed_loads:
+            if xL >= load["a"]-1e-9 and xR <= load["b"]+1e-9:
+                direction = 1.0 if load.get("direction", "Downward") == "Upward" else -1.0
+                for gp, gw in zip(gauss_pts, gauss_weights):
+                    xi = (gp+1)/2
+                    x = xL + xi*le
+                    wmag = load["w0"] + (load["w1"]-load["w0"])*(x-load["a"])/(load["b"]-load["a"])
+                    q = direction*wmag
+                    N = np.array([1-3*xi**2+2*xi**3,
+                                  le*(xi-2*xi**2+xi**3),
+                                  3*xi**2-2*xi**3,
+                                  le*(-xi**2+xi**3)])
+                    F[dofs] += N*q*gw*le/2
 
     for p, x in point_loads:
         idx = min(range(n), key=lambda i: abs(nodes[i]-x))
         F[2*idx] -= p
-
     mid_idx = min(range(n), key=lambda i: abs(nodes[i] - L/2))
     F[2*mid_idx+1] += applied_moment
 
-    restrained = []
-    support_node_indices = []
+    restrained, support_node_indices = [], []
     for support in supports:
         idx = min(range(n), key=lambda i: abs(nodes[i]-float(support["x"])))
         support_node_indices.append(idx)
@@ -567,11 +600,9 @@ def solve_beam(L, supports, point_loads, udl_w, udl_a, udl_b, applied_moment, EI
     R = K @ d - F
     support_reactions = []
     for support, idx in zip(supports, support_node_indices):
-        support_reactions.append({
-            "label": support["label"], "x": float(support["x"]),
+        support_reactions.append({"label": support["label"], "x": float(support["x"]),
             "type": support["type"], "Ry": float(R[2*idx]),
-            "M": float(R[2*idx+1]) if support["type"] == "Fixed" else 0.0
-        })
+            "M": float(R[2*idx+1]) if support["type"] == "Fixed" else 0.0})
     return nodes, d, R, support_reactions
 
 
@@ -711,13 +742,30 @@ elif st.session_state.page == "Simulator":
                     x = st.number_input(f"Position x{i+1} (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"multi_x_{i}")
                 point_loads.append((p, x))
 
-        st.markdown("**5. Uniformly Distributed Load (UDL)**")
-        w = st.number_input("UDL intensity w (kN/m)", min_value=0.0, value=0.0, step=1.0, key="multi_udl_w")
-        ua, ub = st.columns(2)
-        with ua:
-            udl_a = st.number_input("Start a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key="multi_udl_a")
-        with ub:
-            udl_b = st.number_input("End b (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key="multi_udl_b")
+        st.markdown("**5. Distributed Loads**")
+        st.caption("Add rectangular (uniform) or triangular (linearly varying) loads. Intensities are in kN/m.")
+        distributed_count = st.number_input("Number of distributed loads", min_value=0, max_value=10, value=1, step=1, key="multi_distributed_count")
+        distributed_loads = []
+        for i in range(int(distributed_count)):
+            with st.expander(f"Distributed Load {i+1}", expanded=(i == 0)):
+                kind = st.selectbox("Load shape", ["Rectangular (UDL)", "Triangular"], key=f"dist_kind_{i}")
+                c1, c2 = st.columns(2)
+                with c1:
+                    a = st.number_input("Start a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"dist_a_{i}")
+                with c2:
+                    b = st.number_input("End b (m)", min_value=0.0, max_value=float(L), value=float(L), step=0.5, key=f"dist_b_{i}")
+                d1, d2 = st.columns(2)
+                with d1:
+                    w0 = st.number_input("Intensity at start (kN/m)", min_value=0.0, value=0.0, step=1.0, key=f"dist_w0_{i}")
+                with d2:
+                    if kind == "Rectangular (UDL)":
+                        w1 = w0
+                        st.number_input("Intensity at end (kN/m)", min_value=0.0, value=float(w0), disabled=True, key=f"dist_w1_disabled_{i}")
+                    else:
+                        w1 = st.number_input("Intensity at end (kN/m)", min_value=0.0, value=0.0, step=1.0, key=f"dist_w1_{i}")
+                direction = st.selectbox("Direction", ["Downward", "Upward"], key=f"dist_dir_{i}")
+                distributed_loads.append({"type": "triangular" if kind == "Triangular" else "rectangular",
+                    "a": float(a), "b": float(b), "w0": float(w0), "w1": float(w1), "direction": direction})
         st.markdown("**6. Applied Moment**")
         moment = st.number_input("Moment M at beam midpoint (kN·m; CCW positive)", value=0.0, step=1.0, key="multi_moment")
         EI = 20000.0  # Internal constant used by the solver.
@@ -728,8 +776,9 @@ elif st.session_state.page == "Simulator":
             try:
                 if len(edited_supports) < 2:
                     raise ValueError("Please add at least two supports.")
-                if udl_b < udl_a:
-                    raise ValueError("UDL end must be greater than or equal to its start.")
+                for i, load in enumerate(distributed_loads):
+                    if load["b"] <= load["a"]:
+                        raise ValueError(f"Distributed Load {i+1}: end position must be greater than start position.")
                 supports = []
                 for i, row in edited_supports.reset_index(drop=True).iterrows():
                     sx = float(row["Distance from A (m)"])
@@ -744,13 +793,12 @@ elif st.session_state.page == "Simulator":
                     raise ValueError("At least two supports at different positions are required.")
 
                 nodes, displacement, reactions, support_reactions = solve_beam(
-                    float(L), supports, point_loads, float(w), float(udl_a), float(udl_b), float(moment), EI)
-                udl_force = float(w) * (float(udl_b)-float(udl_a))
-                udl_centroid = (float(udl_a)+float(udl_b))/2 if udl_b > udl_a else 0.0
+                    float(L), supports, point_loads, distributed_loads, float(moment), EI)
+                dist_force = sum(distributed_load_integrals(load)[0] for load in distributed_loads)
+                dist_moment_A = sum(distributed_load_integrals(load)[1] for load in distributed_loads)
                 total_Ry = sum(r["Ry"] for r in support_reactions)
-                total_Msupport = sum(r["M"] for r in support_reactions)
-                sumFy = total_Ry - sum(p for p, _ in point_loads) - udl_force
-                sumMA = sum(r["M"] + r["Ry"]*r["x"] for r in support_reactions) - sum(p*x for p,x in point_loads) - udl_force*udl_centroid + float(moment)
+                sumFy = total_Ry - sum(p for p, _ in point_loads) + dist_force
+                sumMA = sum(r["M"] + r["Ry"]*r["x"] for r in support_reactions) - sum(p*x for p,x in point_loads) + dist_moment_A + float(moment)
 
                 st.markdown('<div class="panel-title">▥  Support Reactions</div>', unsafe_allow_html=True)
                 reaction_cols = st.columns(min(3, len(support_reactions)))
@@ -774,12 +822,10 @@ elif st.session_state.page == "Simulator":
                     Msec = sum(r["Ry"] * (xsec-r["x"]) for r in support_reactions if r["x"] < xsec - 1e-9)
                     Msec -= sum(p * (xsec-xp) for p, xp in point_loads if xp < xsec - 1e-9)
                     Msec += sum(r["M"] for r in support_reactions if r["x"] < xsec - 1e-9) * -1.0
-                    udl_left = max(0.0, min(xsec, float(udl_b)) - float(udl_a)) if xsec > float(udl_a) else 0.0
-                    if float(w) > 0 and udl_left > 0:
-                        udl_resultant = float(w) * udl_left
-                        udl_centroid_left = float(udl_a) + udl_left/2
-                        Vsec -= udl_resultant
-                        Msec -= udl_resultant * (xsec-udl_centroid_left)
+                    for load in distributed_loads:
+                        force_left, _, moment_about_cut = distributed_load_integrals(load, x1=xsec)
+                        Vsec += force_left
+                        Msec += moment_about_cut
                     if xsec > float(L)/2 + 1e-9:
                         Msec -= float(moment)
                     has_support = any(abs(r["x"]-xsec) < 1e-7 for r in support_reactions)
@@ -828,11 +874,21 @@ elif st.session_state.page == "Simulator":
                     if p > 0:
                         ax.annotate("",xy=(x,.04),xytext=(x,.78),arrowprops=dict(arrowstyle="-|>",color="#e13b32",lw=2))
                         ax.text(x,.85,f"{p:g} kN",ha="center",fontsize=8,color="#c52e28")
-                if w > 0 and udl_b > udl_a:
-                    ax.plot([udl_a,udl_b],[.46,.46],color="#3182BD",lw=1.5)
-                    for xx in np.linspace(udl_a,udl_b,10):
-                        ax.annotate("",xy=(xx,.04),xytext=(xx,.44),arrowprops=dict(arrowstyle="-|>",color="#3182BD",lw=1))
-                    ax.text((udl_a+udl_b)/2,.54,f"w = {w:g} kN/m",ha="center",fontsize=8,color="#3182BD")
+                for load_index, load in enumerate(distributed_loads):
+                    if load["b"] > load["a"] and max(load["w0"], load["w1"]) > 0:
+                        top_y = .45
+                        xs = np.linspace(load["a"], load["b"], 13)
+                        for xx in xs:
+                            ratio = (xx-load["a"])/(load["b"]-load["a"])
+                            intensity = load["w0"] + (load["w1"]-load["w0"])*ratio
+                            arrow_h = .08 + .34*intensity/max(load["w0"], load["w1"], 1e-9)
+                            if load["direction"] == "Downward":
+                                ax.annotate("", xy=(xx,.04), xytext=(xx,top_y+arrow_h), arrowprops=dict(arrowstyle="-|>",color="#3182BD",lw=1))
+                            else:
+                                ax.annotate("", xy=(xx,top_y+arrow_h), xytext=(xx,.04), arrowprops=dict(arrowstyle="-|>",color="#07833b",lw=1))
+                        shape = "Triangle" if load["type"] == "triangular" else "Rectangular"
+                        ax.text((load["a"]+load["b"])/2,1.0 if load_index == 0 else 1.08,
+                            f"{shape}: {load['w0']:g} → {load['w1']:g} kN/m",ha="center",fontsize=8,color="#3182BD")
                 if moment:
                     ax.annotate("",xy=(L/2+.25,.22),xytext=(L/2-.25,.22),arrowprops=dict(arrowstyle="->",connectionstyle="arc3,rad=-.8",color="#8b36d9",lw=2))
                     ax.text(L/2,.52,f"M = {moment:g} kN·m",ha="center",fontsize=8,color="#8b36d9")
@@ -853,9 +909,17 @@ elif st.session_state.page == "Simulator":
                 else:
                     st.warning("Check the load and support configuration; residuals are not close to zero.")
                 with st.expander("Step-by-Step Calculations",expanded=True):
-                    st.markdown("**1. Convert the UDL into an equivalent force**")
-                    st.latex(r"W_{eq}=w(b-a)")
-                    st.write(f"W_eq = {w:g}({udl_b:g} − {udl_a:g}) = {udl_force:.3f} kN, acting at x̄ = {udl_centroid:.3f} m from A.")
+                    st.markdown("**1. Convert distributed loads into equivalent forces**")
+                    for load_index, load in enumerate(distributed_loads):
+                        force_signed, moment_A_signed, _ = distributed_load_integrals(load)
+                        resultant = abs(force_signed)
+                        centroid = moment_A_signed/force_signed if abs(force_signed) > 1e-12 else (load["a"]+load["b"])/2
+                        if load["type"] == "triangular":
+                            st.latex(r"W=\frac{1}{2}w_{max}L")
+                            st.write(f"Load {load_index+1} (triangular): resultant = {resultant:.3f} kN, centroid at x = {centroid:.3f} m from A.")
+                        else:
+                            st.latex(r"W=wL")
+                            st.write(f"Load {load_index+1} (rectangular): resultant = {resultant:.3f} kN, centroid at x = {centroid:.3f} m from A.")
                     st.markdown("**2. Apply support restraints**")
                     for r in support_reactions:
                         st.write(f"Support {r['label']} ({r['type']}) at x = {r['x']:.3f} m: Ry = {r['Ry']:.4f} kN" + (f", M = {r['M']:.4f} kN·m" if r['type']=="Fixed" else ""))
@@ -865,7 +929,7 @@ elif st.session_state.page == "Simulator":
             except (np.linalg.LinAlgError, ValueError, KeyError, TypeError) as exc:
                 st.error(f"Unable to solve this support arrangement: {exc}")
         else:
-            st.info("Add at least two supports, add any analysis points (including points without supports), enter loads, then click **Calculate Reactions**. Load values default to zero.")
+            st.info("Add at least two supports, add analysis points, enter point or distributed loads, then click **Calculate Reactions**. Load values default to zero.")
 
 elif st.session_state.page == "About":
     st.markdown('<h1 class="section-title">About BeamStat</h1>',unsafe_allow_html=True)
@@ -918,5 +982,4 @@ elif st.session_state.page == "Contact":
         with col:
             st.markdown(f'<div class="panel"><div style="font-size:30px;color:#0752b5">◉</div><div class="panel-title">{creator["name"]}</div><b>{creator["role"]}</b><p class="small-note">{creator["email"]}</p></div>',unsafe_allow_html=True)
     st.info("To personalize this page, edit CONTACT_CREATORS near the top of beamstat_app.py.")
-
 
