@@ -321,7 +321,18 @@ body[data-theme="dark"] .stApp .stButton > button[kind="primary"]:hover {
 .stApp [data-testid="stFormSubmitButton"] button * {
   color: #FFFFFF !important;
 }
+/* FIX: FOLLOW STREAMLIT'S ACTIVE THEME */
+.stApp {
+    --bs-bg: var(--background-color, #ffffff);
+    --bs-secondary: var(--secondary-background-color, #EFF3FF);
+    --bs-readable: var(--text-color, #000000);
+    --bs-border: color-mix(in srgb, var(--bs-readable) 20%, transparent);
 
+    background: var(--bs-bg) !important;
+    color: var(--bs-readable) !important;
+}
+
+/* Main backgrounds */
 </style>
 """, unsafe_allow_html=True)
 
