@@ -58,7 +58,7 @@ div.stButton>button:hover{color:var(--blue)!important;border-bottom:2px solid va
 .hero{display:grid;grid-template-columns:1.02fr 1fr;min-height:420px;align-items:center;gap:1rem;margin-bottom:1.3rem}
 .hero-copy{padding:30px 0 30px 12px;z-index:2;animation:heroFadeUp 1.05s ease-out both}
 .eyebrow{font-style:italic;color:#064ca8;font-size:15px;margin-bottom:10px;animation:heroFadeUp 1s ease-out both}
-.hero-title{font-family:'Poppins',sans-serif;font-size:12000px;line-height:1.02;color:var(--blue);font-weight:900;letter-spacing:-4px;margin:0 0 8px;animation:heroFadeUp 1.15s ease-out both}
+.hero-title{font-family:'Poppins',sans-serif;font-size:100px;line-height:1.02;color:var(--blue);font-weight:900;letter-spacing:-4px;margin:0 0 8px;animation:heroFadeUp 1.15s ease-out both}
 .hero-tag{font-family:'Poppins',sans-serif;font-size:39px;line-height:1.08;font-weight:700;color:#050505;letter-spacing:-1.5px;margin:0 0 14px;animation:heroFadeUp 1.2s .12s ease-out both}
 .hero-desc{font-size:15px;line-height:1.65;max-width:470px;color:#1f2937;animation:heroFadeUp 1.2s .22s ease-out both}
 .hero-photo{height:410px;background-position:center;background-size:cover;position:relative;animation:heroFadeIn 1.5s .2s ease-out both}
