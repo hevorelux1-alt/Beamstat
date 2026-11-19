@@ -151,9 +151,29 @@ if st.session_state.page == "Home":
       <div class="hero-tag">Calculate. Visualize.<br>Understand.</div>
       <p class="hero-desc">An interactive simulator for beam reaction and static equilibrium analysis.
       Solve, check, and build your understanding of structural behavior — one beam at a time.</p>
-      <p style="margin-top:20px;color:#0752b5;font-weight:700">Use the SIMULATOR tab to get started →</p>
     </div><div class="hero-photo" style="{hero_style}"></div></div>
     """, unsafe_allow_html=True)
+    action_cols = st.columns([1, 1, 3])
+    with action_cols[0]:
+        if st.button("▶  Simulate Here", key="home_simulate", type="primary", use_container_width=True):
+            st.session_state.page = "Simulator"
+            st.rerun()
+    with action_cols[1]:
+        if st.button("How It Works", key="home_how", use_container_width=True):
+            st.session_state.show_how_it_works = not st.session_state.get("show_how_it_works", False)
+    if st.session_state.get("show_how_it_works", False):
+        with st.container(border=True):
+            st.markdown("### How to use BeamStat")
+            st.markdown("""
+            1. **Set the beam span** in meters.
+            2. **Choose the supports** at A and B (Pin, Roller, or Fixed).
+            3. **Enter the loads:** point-load magnitudes and positions, UDL intensity and its start/end positions, and an applied moment.
+            4. **Click Calculate Reactions** to solve the beam.
+            5. **Read the reaction cards** for the vertical reactions and any fixed-support moments.
+            6. **Review the beam diagram, equilibrium check, and step-by-step calculations** to understand the result.
+
+            All load inputs start at **zero**, so you can build a problem from scratch. The beam span must remain greater than zero.
+            """)
     st.markdown('<h2 class="section-title">What you can do with BeamStat</h2>', unsafe_allow_html=True)
     c1,c2,c3 = st.columns(3)
     for col, title, desc in [
@@ -165,7 +185,7 @@ if st.session_state.page == "Home":
 
 elif st.session_state.page == "Simulator":
     st.markdown('<h1 class="section-title">Beam Reaction Simulator</h1>', unsafe_allow_html=True)
-    st.caption("Set the beam supports and loads, then calculate the reactions. The current model covers vertical loading and beam bending.")
+    st.caption("Start with zero loads, enter your beam data, then calculate the support reactions. This model covers vertical loading and beam bending.")
     input_col, result_col = st.columns([.88, 1.72], gap="medium")
     with input_col:
         st.markdown('<div class="panel-title">⚙️  1. Beam Configuration</div>', unsafe_allow_html=True)
@@ -177,19 +197,19 @@ elif st.session_state.page == "Simulator":
             support_B = st.selectbox("Support at B", ["Pin", "Roller", "Fixed"], index=1)
         st.markdown('<div class="small-note">Pin: vertical and horizontal restraint. Roller: vertical restraint. Fixed: translation and rotation restraint. Horizontal loading is not included in this prototype.</div>', unsafe_allow_html=True)
         st.markdown("**2. Applied Loads**")
-        P1 = st.number_input("Point load P₁ (kN, downward)", min_value=0.0, value=20.0, step=1.0)
-        x1 = st.number_input("Position x₁ (m)", min_value=0.0, max_value=float(L), value=min(2.0,float(L)), step=.5)
-        P2 = st.number_input("Point load P₂ (kN, downward)", min_value=0.0, value=15.0, step=1.0)
-        x2 = st.number_input("Position x₂ (m)", min_value=0.0, max_value=float(L), value=min(5.0,float(L)), step=.5)
+        P1 = st.number_input("Point load P₁ (kN, downward)", min_value=0.0, value=0.0, step=1.0)
+        x1 = st.number_input("Position x₁ (m)", min_value=0.0, max_value=float(L), value=0.0, step=.5)
+        P2 = st.number_input("Point load P₂ (kN, downward)", min_value=0.0, value=0.0, step=1.0)
+        x2 = st.number_input("Position x₂ (m)", min_value=0.0, max_value=float(L), value=0.0, step=.5)
         st.markdown("**Uniformly Distributed Load (UDL)**")
-        w = st.number_input("UDL intensity w (kN/m)", min_value=0.0, value=10.0, step=1.0)
+        w = st.number_input("UDL intensity w (kN/m)", min_value=0.0, value=0.0, step=1.0)
         ua, ub = st.columns(2)
         with ua:
-            udl_a = st.number_input("Start a (m)", min_value=0.0, max_value=float(L), value=1.0, step=.5)
+            udl_a = st.number_input("Start a (m)", min_value=0.0, max_value=float(L), value=0.0, step=.5)
         with ub:
-            udl_b = st.number_input("End b (m)", min_value=0.0, max_value=float(L), value=min(4.0,float(L)), step=.5)
+            udl_b = st.number_input("End b (m)", min_value=0.0, max_value=float(L), value=0.0, step=.5)
         st.markdown("**Applied Moment**")
-        moment = st.number_input("Moment M (kN·m; CCW positive)", value=30.0, step=1.0)
+        moment = st.number_input("Moment M (kN·m; CCW positive)", value=0.0, step=1.0)
         EI = 20000.0  # Internal constant used by the beam stiffness solver; hidden from the user.
         calculate = st.button("▦  Calculate Reactions  →", use_container_width=True)
 
@@ -210,7 +230,7 @@ elif st.session_state.page == "Simulator":
 
                     st.markdown('<div class="panel-title">▥  Support Reactions</div>', unsafe_allow_html=True)
                     metrics = st.columns(4)
-                    values = [("Rₐₓ","0.00 kN","Horizontal*"),("Rₐᵧ",f"{RAy:.2f} kN","Vertical at A"),("Rᵦᵧ",f"{RBy:.2f} kN","Vertical at B"),("M support",f"{MA+MB:.2f} kN·m","Sum of fixed-end moments")]
+                    values = [("Rₐₓ","0.00 kN","Horizontal*"),("Rₐ",f"{RAy:.3f} kN","Vertical reaction at A"),("Rᵦ",f"{RBy:.3f} kN","Vertical reaction at B"),("M support",f"{MA+MB:.3f} kN·m","Sum of fixed-end moments")]
                     for col,(label,value,caption) in zip(metrics,values):
                         with col:
                             st.markdown(f'<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{value}</div><div class="metric-unit">{caption}</div></div>',unsafe_allow_html=True)
