@@ -208,7 +208,7 @@ div[data-testid="stImage"] img { max-width: 100%; height: auto; }
   --bs-action-hover: #3182BD;
 }
 .stApp {
-  --bs-readable: var(--text-color, #173B5E);
+  --bs-readable: #000000;
 }
 .stApp [data-testid="stExpander"] summary,
 .stApp [data-testid="stExpander"] summary *,
@@ -265,13 +265,13 @@ div[data-testid="stImage"] img { max-width: 100%; height: auto; }
 }
 .stApp a { color: var(--bs-palette-5) !important; }
 [data-theme="light"] .stApp {
-  --bs-readable: #173B5E;
+  --bs-readable: #000000;
   --bs-action: #08519C;
   --bs-action-hover: #3182BD;
 }
 [data-theme="dark"] .stApp,
 body[data-theme="dark"] .stApp {
-  --bs-readable: #EFF3FF;
+  --bs-readable: #FFFFFF;
   --bs-action: #3182BD;
   --bs-action-hover: #6BAED6;
 }
@@ -284,12 +284,43 @@ body[data-theme="dark"] .stApp .stButton > button[kind="primary"]:hover {
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .stApp {
-    --bs-readable: #EFF3FF;
+    --bs-readable: #FFFFFF;
     --bs-action: #3182BD;
     --bs-action-hover: #6BAED6;
   }
 }
 /* ============================================================================ */
+
+
+/* FINAL TEXT CONTRAST: BLACK IN LIGHT MODE, WHITE IN DARK MODE */
+[data-theme="light"] .stApp,
+[data-theme="light"] .stApp p,
+[data-theme="light"] .stApp span,
+[data-theme="light"] .stApp label,
+[data-theme="light"] .stApp li,
+[data-theme="light"] .stApp [data-testid="stMarkdownContainer"],
+[data-theme="light"] .stApp [data-testid="stWidgetLabel"],
+[data-theme="light"] .stApp [data-testid="stExpander"] summary,
+[data-theme="light"] .stApp [data-testid="stCaptionContainer"] {
+  color: #000000 !important;
+}
+[data-theme="dark"] .stApp,
+[data-theme="dark"] .stApp p,
+[data-theme="dark"] .stApp span,
+[data-theme="dark"] .stApp label,
+[data-theme="dark"] .stApp li,
+[data-theme="dark"] .stApp [data-testid="stMarkdownContainer"],
+[data-theme="dark"] .stApp [data-testid="stWidgetLabel"],
+[data-theme="dark"] .stApp [data-testid="stExpander"] summary,
+[data-theme="dark"] .stApp [data-testid="stCaptionContainer"] {
+  color: #FFFFFF !important;
+}
+.stApp .stButton > button[kind="primary"],
+.stApp .stButton > button[kind="primary"] *,
+.stApp [data-testid="stFormSubmitButton"] button,
+.stApp [data-testid="stFormSubmitButton"] button * {
+  color: #FFFFFF !important;
+}
 
 </style>
 """, unsafe_allow_html=True)
@@ -715,4 +746,3 @@ elif st.session_state.page == "Contact":
             st.markdown(f'<div class="panel"><div style="font-size:30px;color:#0752b5">◉</div><div class="panel-title">{creator["name"]}</div><b>{creator["role"]}</b><p class="small-note">{creator["email"]}</p></div>',unsafe_allow_html=True)
     st.info("To personalize this page, edit CONTACT_CREATORS near the top of beamstat_app.py.")
 
-       
