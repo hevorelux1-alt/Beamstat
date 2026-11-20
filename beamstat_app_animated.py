@@ -749,7 +749,7 @@ if st.session_state.page == "Home":
 
 elif st.session_state.page == "Simulator":
     st.markdown('<h1 class="section-title">Beam Reaction Simulator</h1>', unsafe_allow_html=True)
-    st.caption("Add two or more supports at any position along the beam, then enter loads and calculate the reactions. This model covers vertical loading and beam bending.")
+    st.caption("Please note that this tool only supports simply supported beams with uniform downward loads. Point loads, upward loads, varying loads, dynamic effects, multi-span beams, and non-linear material behavior are not considered. The analysis assumes linear elasticity and constant beam cross-section. Using the tool outside these conditions may result in inaccurate results..")
     input_col, result_col = st.columns([.95, 1.65], gap="medium")
     with input_col:
         st.markdown('<div class="panel-title">⚙️  1. Beam Configuration</div>', unsafe_allow_html=True)
