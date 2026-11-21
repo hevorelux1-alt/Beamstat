@@ -597,6 +597,11 @@ def distributed_intensity(load, x):
         return wmax * np.clip((x-a) / max(b-a, 1e-12), 0.0, 1.0)
     if shape == "triangular_decreasing":
         return wmax * np.clip((b-x) / max(b-a, 1e-12), 0.0, 1.0)
+    if shape == "trapezoidal":
+        w0 = float(load.get("w0", 0.0))
+        w1 = float(load.get("w1", wmax))
+        ratio = np.clip((x-a) / max(b-a, 1e-12), 0.0, 1.0)
+        return w0 + (w1-w0)*ratio
     if shape == "triangular":  # backward compatibility with earlier saved settings
         w0, w1 = float(load.get("w0", 0.0)), float(load.get("w1", wmax))
         return w0 + (w1-w0)*(x-a)/max(b-a, 1e-12)
@@ -850,11 +855,12 @@ elif st.session_state.page == "Simulator":
         st.caption("Choose a load shape and position range. You can add multiple distributed loads, including loads that overlap or stack on the same beam region.")
         distributed_count = st.number_input("Number of distributed loads", min_value=0, max_value=10, value=1, step=1, key="multi_distributed_count")
         distributed_loads = []
-        shape_options = ["Rectangular (uniform)", "Triangular – increasing", "Triangular – decreasing", "Tent-shaped (peak in middle/inside)"]
+        shape_options = ["Rectangular (uniform)", "Triangular – increasing", "Triangular – decreasing", "Trapezoidal (varying both ends)", "Tent-shaped (peak in middle/inside)"]
         shape_map = {
             "Rectangular (uniform)": "rectangular",
             "Triangular – increasing": "triangular_increasing",
             "Triangular – decreasing": "triangular_decreasing",
+            "Trapezoidal (varying both ends)": "trapezoidal",
             "Tent-shaped (peak in middle/inside)": "tent",
         }
         for i in range(int(distributed_count)):
@@ -870,13 +876,22 @@ elif st.session_state.page == "Simulator":
                 if shape == "tent":
                     peak_x = st.number_input("Peak position (m)", min_value=float(a), max_value=float(b), value=float((a+b)/2), step=0.5, key=f"dist_peak_{i}")
                     st.caption("The load starts at zero, rises to the maximum at the peak, then returns to zero.")
-                wmax = st.number_input("Maximum intensity (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_wmax_{i}")
+                if shape == "trapezoidal":
+                    tc1, tc2 = st.columns(2)
+                    with tc1:
+                        w0 = st.number_input("Intensity at start a (kN/m)", min_value=0.0, value=5.0, step=1.0, key=f"dist_w0_{i}")
+                    with tc2:
+                        w1 = st.number_input("Intensity at end b (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_w1_{i}")
+                    wmax = max(float(w0), float(w1))
+                    st.caption("Intensity varies linearly from the start value to the end value.")
+                else:
+                    wmax = st.number_input("Maximum intensity (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_wmax_{i}")
+                    w0 = 0.0 if shape in ("triangular_increasing", "tent") else float(wmax)
+                    w1 = 0.0 if shape in ("triangular_decreasing", "tent") else float(wmax)
                 direction = st.selectbox("Direction", ["Downward", "Upward"], key=f"dist_dir_{i}")
                 distributed_loads.append({"type": shape, "a": float(a), "b": float(b),
                     "peak_x": None if peak_x is None else float(peak_x), "wmax": float(wmax),
-                    "w0": 0.0 if shape in ("triangular_increasing", "tent") else float(wmax),
-                    "w1": 0.0 if shape in ("triangular_decreasing", "tent") else float(wmax),
-                    "direction": direction})
+                    "w0": float(w0), "w1": float(w1), "direction": direction})
         st.markdown("**6. Applied Moment**")
         mc1, mc2 = st.columns(2)
         with mc1:
@@ -961,13 +976,32 @@ elif st.session_state.page == "Simulator":
                             f'<div class="metric-unit">Internal bending moment</div></div>', unsafe_allow_html=True)
 
                 st.markdown('<div class="panel-title" style="margin-top:16px">✎  Beam Diagram</div>',unsafe_allow_html=True)
-                fig, ax = plt.subplots(figsize=(11, 3.8))
+                fig, ax = plt.subplots(figsize=(11, max(3.8, 3.8 + 0.24*max(0, len(analysis_points)+len(support_reactions)+len(point_loads)+len(distributed_loads)-5))))
                 chart_dark = _DARK_FALLBACK
                 chart_bg = "#101827" if chart_dark else "#FFFFFF"
                 chart_fg = "#EFF3FF" if chart_dark else "#173B5E"
                 fig.patch.set_facecolor(chart_bg)
                 ax.set_facecolor(chart_bg)
                 ax.plot([0,L],[0,0],color="#263b5a",lw=7,solid_capstyle="round",zorder=3)
+                # Greedy label lanes keep labels below the beam and prevent collisions
+                # when several loads/supports/analysis points share nearby coordinates.
+                label_lanes = []
+                def add_diagram_label(xpos, text, color, fontsize=8, weight="normal"):
+                    xpos = float(xpos)
+                    half_width = max(0.16, len(str(text)) * max(float(L), 1.0) / 105.0)
+                    lane = 0
+                    while True:
+                        if lane == len(label_lanes):
+                            label_lanes.append([])
+                        if all(xpos + half_width < left or xpos - half_width > right
+                               for left, right in label_lanes[lane]):
+                            label_lanes[lane].append((xpos-half_width, xpos+half_width))
+                            break
+                        lane += 1
+                    y = -0.43 - lane*0.24
+                    ax.text(xpos, y, str(text), ha="center", va="top", fontsize=fontsize,
+                            color=color, fontweight=weight, clip_on=False)
+
                 for support_index, reaction in enumerate(support_reactions):
                     sx, kind, label = reaction["x"], reaction["type"], reaction["label"]
                     if kind == "Pin":
@@ -980,22 +1014,22 @@ elif st.session_state.page == "Simulator":
                         ax.plot([sx,sx],[-.38,.27],color="#08519C",lw=5,zorder=4)
                         for yy in np.linspace(-.35,.22,6):
                             ax.plot([sx-.15,sx],[yy,yy+.08],color="#08519C",lw=1)
-                    ax.annotate(f"R{label} = {reaction['Ry']:.2f} kN", xy=(sx,-.31), xytext=(sx,-.72-(0.22*(support_index%2))), ha="center", fontsize=8, color="#07833b")
-                    ax.text(sx,-.48,f"{label} · {kind}",ha="center",fontsize=8,color="#173b70")
+                    add_diagram_label(sx, f"R{label} = {reaction['Ry']:.2f} kN", "#07833b")
+                    add_diagram_label(sx, f"{label} · {kind}", "#173b70")
                     if reaction["type"] == "Fixed" and abs(reaction["M"]) > 1e-8:
-                        ax.text(sx,.48,f"M{label}={reaction['M']:.2f} kN·m",ha="center",fontsize=8,color="#8b36d9")
+                        add_diagram_label(sx, f"M{label}={reaction['M']:.2f} kN·m", "#8b36d9")
                 for point in analysis_points:
                     px = point["x"]
                     ax.axvline(px, ymin=.28, ymax=.72, color="#94a3b8", lw=1, ls="--", alpha=.8, zorder=1)
-                    ax.text(px, -.62, point["label"], ha="center", va="top", fontsize=8, color="#7c3aed", fontweight="bold")
+                    add_diagram_label(px, f"Point {point['label']}", "#7c3aed", weight="bold")
                 for i, (p_down,x) in enumerate(point_loads):
                     if abs(p_down) > 1e-10:
                         if p_down > 0:
                             ax.annotate("",xy=(x,.04),xytext=(x,.78),arrowprops=dict(arrowstyle="-|>",color="#e13b32",lw=2))
-                            ax.text(x,-.92,f"{abs(p_down):g} kN ↓",ha="center",va="top",fontsize=8,color="#c52e28")
+                            add_diagram_label(x, f"{abs(p_down):g} kN ↓", "#c52e28")
                         else:
                             ax.annotate("",xy=(x,.78),xytext=(x,.04),arrowprops=dict(arrowstyle="-|>",color="#07833b",lw=2))
-                            ax.text(x,-.92,f"{abs(p_down):g} kN ↑",ha="center",va="top",fontsize=8,color="#07833b")
+                            add_diagram_label(x, f"{abs(p_down):g} kN ↑", "#07833b")
                 for load_index, load in enumerate(distributed_loads):
                     if load["b"] > load["a"] and float(load.get("wmax", max(load.get("w0", 0), load.get("w1", 0)))) > 0:
                         if load.get("type") == "tent":
@@ -1007,7 +1041,6 @@ elif st.session_state.page == "Simulator":
                         max_intensity = max(float(np.max(intensities)), 1e-9)
                         arrow_tops = .04 + (.08 + .42*intensities/max_intensity)
                         envelope_color = "#3182BD" if load["direction"] == "Downward" else "#07833b"
-                        # Draw arrows first, then a closed outline so the envelope remains visible.
                         for xx, arrow_top in zip(xs, arrow_tops):
                             if load["direction"] == "Downward":
                                 ax.annotate("", xy=(xx,.045), xytext=(xx,arrow_top-.025),
@@ -1015,30 +1048,32 @@ elif st.session_state.page == "Simulator":
                             else:
                                 ax.annotate("", xy=(xx,arrow_top-.025), xytext=(xx,.045),
                                     arrowprops=dict(arrowstyle="-|>", color=envelope_color, lw=1.0), zorder=4)
-                        # Closed boundary: vertical ends and a continuous top profile.
                         ax.plot([load["a"], load["a"]], [.045, arrow_tops[0]], color=envelope_color, lw=2.2, zorder=8)
                         ax.plot(xs, arrow_tops, color=envelope_color, lw=2.2, zorder=8)
                         ax.plot([load["b"], load["b"]], [arrow_tops[-1], .045], color=envelope_color, lw=2.2, zorder=8)
                         shape_labels = {
-                            "rectangular": "Rectangular",
-                            "triangular_increasing": "Triangle increasing",
-                            "triangular_decreasing": "Triangle decreasing",
-                            "tent": "Tent-shaped triangle",
-                            "triangular": "Triangle",
+                            "rectangular": "Rectangular", "triangular_increasing": "Triangle increasing",
+                            "triangular_decreasing": "Triangle decreasing", "trapezoidal": "Trapezoidal",
+                            "tent": "Tent-shaped triangle", "triangular": "Triangle",
                         }
                         label = shape_labels.get(load["type"], "Distributed load")
-                        label_y = -1.18 - 0.18*(load_index % 2)
-                        ax.text((load["a"]+load["b"])/2, label_y,
-                            f"{label}: {load.get('wmax', max(load.get('w0', 0), load.get('w1', 0))):g} kN/m",
-                            ha="center", fontsize=8, color=envelope_color)
+                        intensity_text = (f"{load.get('w0', 0):g}→{load.get('w1', 0):g} kN/m"
+                                          if load.get("type") == "trapezoidal" else
+                                          f"{load.get('wmax', max(load.get('w0', 0), load.get('w1', 0))):g} kN/m")
+                        add_diagram_label((load["a"]+load["b"])/2, f"{label}: {intensity_text}", envelope_color)
                 if moment:
                     mx = float(moment_x)
                     ax.annotate("",xy=(mx+.25,.22),xytext=(mx-.25,.22),arrowprops=dict(arrowstyle="->" if moment > 0 else "<-",connectionstyle="arc3,rad=-.8",color="#8b36d9",lw=2))
-                    ax.text(mx,-.42,f"M = {moment:g} kN·m",ha="center",va="top",fontsize=8,color="#8b36d9")
-                ax.annotate("",xy=(L,-1.62),xytext=(0,-1.62),arrowprops=dict(arrowstyle="<->",color="#64748b"))
-                ax.text(L/2,-1.76,f"L = {L:.2f} m",ha="center",fontsize=8,color="#475569")
-                ax.set_xlim(-.45,L+.45); ax.set_ylim(-2.02,1.35); ax.axis("off")
+                    add_diagram_label(mx, f"M = {moment:g} kN·m", "#8b36d9")
+                lowest_label_y = -0.43 - max(0, len(label_lanes)-1)*0.24
+                dimension_y = lowest_label_y - 0.58
+                ax.annotate("",xy=(L,dimension_y),xytext=(0,dimension_y),arrowprops=dict(arrowstyle="<->",color="#64748b"))
+                ax.text(L/2,dimension_y-.14,f"L = {L:.2f} m",ha="center",fontsize=8,color="#475569")
+                ax.set_xlim(-.45,L+.45); ax.set_ylim(dimension_y-.42,1.35); ax.axis("off")
                 ax.tick_params(colors=chart_fg)
+                diagram_png = io.BytesIO()
+                fig.savefig(diagram_png, format="png", dpi=180, bbox_inches="tight", facecolor=fig.get_facecolor())
+                diagram_png.seek(0)
                 st.pyplot(fig,use_container_width=True)
                 plt.close(fig)
 
@@ -1112,6 +1147,15 @@ elif st.session_state.page == "Simulator":
 
                 pdf_buffer = io.BytesIO()
                 with PdfPages(pdf_buffer) as pdf:
+                    # Embed the exact same rendered beam-diagram image shown above in Streamlit.
+                    diagram_image = plt.imread(diagram_png, format="png")
+                    fig_diagram_pdf = plt.figure(figsize=(11.0, 5.2))
+                    ax_diagram_pdf = fig_diagram_pdf.add_axes([0.025, 0.08, 0.95, 0.84])
+                    ax_diagram_pdf.imshow(diagram_image)
+                    ax_diagram_pdf.axis("off")
+                    fig_diagram_pdf.suptitle("BEAMSTAT · SIMULATION DIAGRAM", fontsize=15, fontweight="bold", y=0.98)
+                    pdf.savefig(fig_diagram_pdf, bbox_inches="tight")
+                    plt.close(fig_diagram_pdf)
                     report_lines = [
                         "BEAMSTAT - BEAM ANALYSIS REPORT",
                         "Educational simulation results",
@@ -1144,10 +1188,15 @@ elif st.session_state.page == "Simulator":
                     report_lines += ["", "DISTRIBUTED LOADS"]
                     if distributed_loads:
                         for idx, load in enumerate(distributed_loads, start=1):
+                            intensity_description = (
+                                f"end intensities={load.get('w0', 0):.3f} to {load.get('w1', 0):.3f} kN/m"
+                                if load.get("type") == "trapezoidal"
+                                else f"peak={load.get('wmax', 0):.3f} kN/m"
+                            )
                             report_lines.append(
                                 f"Load {idx}: {load.get('type', 'distributed')}, "
                                 f"x={load['a']:.3f} to {load['b']:.3f} m, "
-                                f"peak={load.get('wmax', 0):.3f} kN/m, {load.get('direction', '')}"
+                                f"{intensity_description}, {load.get('direction', '')}"
                             )
                     else:
                         report_lines.append("No distributed loads entered.")
