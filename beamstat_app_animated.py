@@ -631,13 +631,13 @@ def distributed_load_integrals(load, x0=None, x1=None):
     return float(force), float(moment_A), float(moment_cut)
 
 
-def solve_beam(L, supports, point_loads, distributed_loads, applied_moment, EI):
+def solve_beam(L, supports, point_loads, distributed_loads, applied_moment, moment_x, EI):
     """Euler-Bernoulli beam FE model with point and linearly varying loads."""
     support_positions = [float(s["x"]) for s in supports]
     load_bounds = [v for load in distributed_loads for v in (float(load["a"]), float(load["b"]))]
     load_peaks = [float(load["peak_x"]) for load in distributed_loads if load.get("type") == "tent"]
     nodes = sorted(set([0.0, float(L)] + support_positions
-                       + [float(x) for _, x in point_loads] + load_bounds + load_peaks + [float(L)/2]))
+                       + [float(x) for _, x in point_loads] + load_bounds + load_peaks + [float(moment_x)]))
     n = len(nodes)
     K = np.zeros((2*n, 2*n), dtype=float)
     F = np.zeros(2*n, dtype=float)
@@ -674,8 +674,8 @@ def solve_beam(L, supports, point_loads, distributed_loads, applied_moment, EI):
     for p, x in point_loads:
         idx = min(range(n), key=lambda i: abs(nodes[i]-x))
         F[2*idx] -= p
-    mid_idx = min(range(n), key=lambda i: abs(nodes[i] - L/2))
-    F[2*mid_idx+1] += applied_moment
+    moment_idx = min(range(n), key=lambda i: abs(nodes[i] - float(moment_x)))
+    F[2*moment_idx+1] += applied_moment
 
     restrained, support_node_indices = [], []
     for support in supports:
@@ -749,7 +749,7 @@ if st.session_state.page == "Home":
 
 elif st.session_state.page == "Simulator":
     st.markdown('<h1 class="section-title">Beam Reaction Simulator</h1>', unsafe_allow_html=True)
-    st.caption("Please note that this tool only supports simply supported beams with uniform downward loads. Point loads, upward loads, varying loads, dynamic effects, multi-span beams, and non-linear material behavior are not considered. The analysis assumes linear elasticity and constant beam cross-section. Using the tool outside these conditions may result in inaccurate results.")
+    st.caption("Add two or more supports at any position along the beam, then enter loads and calculate the reactions. This model covers vertical loading and beam bending.")
     input_col, result_col = st.columns([.95, 1.65], gap="medium")
     with input_col:
         st.markdown('<div class="panel-title">⚙️  1. Beam Configuration</div>', unsafe_allow_html=True)
@@ -826,19 +826,28 @@ elif st.session_state.page == "Simulator":
                 analysis_points.append({"label": point_label.strip() or f"P{i+1}", "x": float(px)})
 
         st.markdown("**4. Applied Point Loads**")
+        st.caption("Enter the force magnitude and its angle measured counterclockwise from the positive horizontal axis (+x).")
         point_count = st.number_input("Number of point loads", min_value=0, max_value=10, value=2, step=1, key="point_load_count_multi")
         point_loads = []
+        point_load_details = []
         for i in range(int(point_count)):
             with st.expander(f"Point Load {i+1}", expanded=(i < 2)):
-                pc1, pc2 = st.columns(2)
+                pc1, pc2, pc3 = st.columns(3)
                 with pc1:
-                    p = st.number_input(f"P{i+1} (kN, downward)", min_value=0.0, value=0.0, step=1.0, key=f"multi_p_{i}")
+                    p_mag = st.number_input(f"P{i+1} magnitude (kN)", min_value=0.0, value=0.0, step=1.0, key=f"multi_p_{i}")
                 with pc2:
+                    angle = st.number_input(f"Angle θ{i+1} (° from +x)", min_value=-360.0, max_value=360.0, value=-90.0, step=5.0, key=f"multi_angle_{i}")
+                with pc3:
                     x = st.number_input(f"Position x{i+1} (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"multi_x_{i}")
-                point_loads.append((p, x))
+                fx = float(p_mag) * float(np.cos(np.radians(angle)))
+                fy = float(p_mag) * float(np.sin(np.radians(angle)))
+                st.caption(f"Components: Fx = {fx:.3f} kN · Fy = {fy:.3f} kN ({'upward' if fy > 1e-9 else 'downward' if fy < -1e-9 else 'zero vertical'})")
+                # The beam-bending solver uses signed vertical load (positive downward).
+                point_loads.append((-fy, float(x)))
+                point_load_details.append({"P": float(p_mag), "angle": float(angle), "Fx": fx, "Fy": fy, "x": float(x)})
 
         st.markdown("**5. Distributed Loads**")
-        st.caption("Choose a load shape. BeamStat automatically creates its intensity profile; only the maximum intensity is needed.")
+        st.caption("Choose a load shape and position range. You can add multiple distributed loads, including loads that overlap or stack on the same beam region.")
         distributed_count = st.number_input("Number of distributed loads", min_value=0, max_value=10, value=1, step=1, key="multi_distributed_count")
         distributed_loads = []
         shape_options = ["Rectangular (uniform)", "Triangular – increasing", "Triangular – decreasing", "Tent-shaped (peak in middle/inside)"]
@@ -869,7 +878,12 @@ elif st.session_state.page == "Simulator":
                     "w1": 0.0 if shape in ("triangular_decreasing", "tent") else float(wmax),
                     "direction": direction})
         st.markdown("**6. Applied Moment**")
-        moment = st.number_input("Moment M at beam midpoint (kN·m; CCW positive)", value=0.0, step=1.0, key="multi_moment")
+        mc1, mc2 = st.columns(2)
+        with mc1:
+            moment = st.number_input("Moment magnitude (kN·m; CCW positive)", value=0.0, step=1.0, key="multi_moment")
+        with mc2:
+            moment_x = st.number_input("Moment position x (m)", min_value=0.0, max_value=float(L), value=float(L)/2, step=0.5, key="multi_moment_x")
+        st.caption("The applied couple can be positioned anywhere from the left end (x = 0) to the right end (x = L). Positive values are counterclockwise.")
         EI = 20000.0  # Internal constant used by the solver.
         calculate = st.button("▦  Calculate Reactions  →", use_container_width=True, type="primary", key="multi_calculate")
 
@@ -897,7 +911,7 @@ elif st.session_state.page == "Simulator":
                     raise ValueError("At least two supports at different positions are required.")
 
                 nodes, displacement, reactions, support_reactions = solve_beam(
-                    float(L), supports, point_loads, distributed_loads, float(moment), EI)
+                    float(L), supports, point_loads, distributed_loads, float(moment), float(moment_x), EI)
                 dist_force = sum(distributed_load_integrals(load)[0] for load in distributed_loads)
                 dist_moment_A = sum(distributed_load_integrals(load)[1] for load in distributed_loads)
                 total_Ry = sum(r["Ry"] for r in support_reactions)
@@ -930,7 +944,7 @@ elif st.session_state.page == "Simulator":
                         force_left, _, moment_about_cut = distributed_load_integrals(load, x1=xsec)
                         Vsec += force_left
                         Msec += moment_about_cut
-                    if xsec > float(L)/2 + 1e-9:
+                    if xsec > float(moment_x) + 1e-9:
                         Msec -= float(moment)
                     has_support = any(abs(r["x"]-xsec) < 1e-7 for r in support_reactions)
                     section_results.append({"label": point["label"], "x": xsec, "V": Vsec, "M": Msec, "has_support": has_support})
@@ -973,11 +987,15 @@ elif st.session_state.page == "Simulator":
                 for point in analysis_points:
                     px = point["x"]
                     ax.axvline(px, ymin=.28, ymax=.72, color="#94a3b8", lw=1, ls="--", alpha=.8, zorder=1)
-                    ax.text(px, .16, point["label"], ha="center", va="bottom", fontsize=8, color="#7c3aed", fontweight="bold")
-                for i, (p,x) in enumerate(point_loads):
-                    if p > 0:
-                        ax.annotate("",xy=(x,.04),xytext=(x,.78),arrowprops=dict(arrowstyle="-|>",color="#e13b32",lw=2))
-                        ax.text(x,.85,f"{p:g} kN",ha="center",fontsize=8,color="#c52e28")
+                    ax.text(px, -.62, point["label"], ha="center", va="top", fontsize=8, color="#7c3aed", fontweight="bold")
+                for i, (p_down,x) in enumerate(point_loads):
+                    if abs(p_down) > 1e-10:
+                        if p_down > 0:
+                            ax.annotate("",xy=(x,.04),xytext=(x,.78),arrowprops=dict(arrowstyle="-|>",color="#e13b32",lw=2))
+                            ax.text(x,-.92,f"{abs(p_down):g} kN ↓",ha="center",va="top",fontsize=8,color="#c52e28")
+                        else:
+                            ax.annotate("",xy=(x,.78),xytext=(x,.04),arrowprops=dict(arrowstyle="-|>",color="#07833b",lw=2))
+                            ax.text(x,-.92,f"{abs(p_down):g} kN ↑",ha="center",va="top",fontsize=8,color="#07833b")
                 for load_index, load in enumerate(distributed_loads):
                     if load["b"] > load["a"] and float(load.get("wmax", max(load.get("w0", 0), load.get("w1", 0)))) > 0:
                         if load.get("type") == "tent":
@@ -1009,16 +1027,17 @@ elif st.session_state.page == "Simulator":
                             "triangular": "Triangle",
                         }
                         label = shape_labels.get(load["type"], "Distributed load")
-                        label_y = float(np.max(arrow_tops)) + .12
+                        label_y = -1.18 - 0.18*(load_index % 2)
                         ax.text((load["a"]+load["b"])/2, label_y,
                             f"{label}: {load.get('wmax', max(load.get('w0', 0), load.get('w1', 0))):g} kN/m",
                             ha="center", fontsize=8, color=envelope_color)
                 if moment:
-                    ax.annotate("",xy=(L/2+.25,.22),xytext=(L/2-.25,.22),arrowprops=dict(arrowstyle="->",connectionstyle="arc3,rad=-.8",color="#8b36d9",lw=2))
-                    ax.text(L/2,.52,f"M = {moment:g} kN·m",ha="center",fontsize=8,color="#8b36d9")
-                ax.annotate("",xy=(L,-1.12),xytext=(0,-1.12),arrowprops=dict(arrowstyle="<->",color="#64748b"))
-                ax.text(L/2,-1.25,f"L = {L:.2f} m",ha="center",fontsize=8,color="#475569")
-                ax.set_xlim(-.45,L+.45); ax.set_ylim(-1.48,1.35); ax.axis("off")
+                    mx = float(moment_x)
+                    ax.annotate("",xy=(mx+.25,.22),xytext=(mx-.25,.22),arrowprops=dict(arrowstyle="->" if moment > 0 else "<-",connectionstyle="arc3,rad=-.8",color="#8b36d9",lw=2))
+                    ax.text(mx,-.42,f"M = {moment:g} kN·m",ha="center",va="top",fontsize=8,color="#8b36d9")
+                ax.annotate("",xy=(L,-1.62),xytext=(0,-1.62),arrowprops=dict(arrowstyle="<->",color="#64748b"))
+                ax.text(L/2,-1.76,f"L = {L:.2f} m",ha="center",fontsize=8,color="#475569")
+                ax.set_xlim(-.45,L+.45); ax.set_ylim(-2.02,1.35); ax.axis("off")
                 ax.tick_params(colors=chart_fg)
                 st.pyplot(fig,use_container_width=True)
                 plt.close(fig)
@@ -1051,7 +1070,7 @@ elif st.session_state.page == "Simulator":
                         st.write(f"Support {r['label']} ({r['type']}) at x = {r['x']:.3f} m: Ry = {r['Ry']:.4f} kN" + (f", M = {r['M']:.4f} kN·m" if r['type']=="Fixed" else ""))
                     st.markdown("**3. Verify global equilibrium**")
                     st.write(f"ΣFy = {sumFy:.6f} kN; ΣM about A = {sumMA:.6f} kN·m.")
-                    st.caption("The beam is modeled with Euler–Bernoulli elements and constant internal EI. Reactions are recovered at every entered support location.")
+                    st.caption("The beam is modeled with Euler–Bernoulli elements and constant internal EI. Inclined point loads are resolved into components; only the vertical component is included in beam bending in this vertical-only model.")
 
                 # -----------------------------------------------------------------
                 # Export the completed analysis as CSV and PDF.
@@ -1063,7 +1082,7 @@ elif st.session_state.page == "Simulator":
                 csv_writer = csv.writer(csv_buffer)
                 csv_writer.writerow(["BeamStat Analysis Results"])
                 csv_writer.writerow(["Beam length (m)", float(L)])
-                csv_writer.writerow(["Applied midpoint moment (kN·m)", float(moment)])
+                csv_writer.writerow(["Applied moment (kN·m)", float(moment)])
                 csv_writer.writerow([])
                 csv_writer.writerow(["Support Reactions"])
                 csv_writer.writerow(["Support", "Type", "Position x (m)", "Vertical reaction Ry (kN)", "Moment reaction (kN·m)"])
@@ -1081,9 +1100,9 @@ elif st.session_state.page == "Simulator":
                 csv_writer.writerow(["Status", "Verified" if abs(sumFy) < 1e-5 and abs(sumMA) < 1e-5 else "Review required"])
                 csv_writer.writerow([])
                 csv_writer.writerow(["Point Loads"])
-                csv_writer.writerow(["Load", "Magnitude (kN)", "Position x (m)"])
-                for idx, (load_value, load_x) in enumerate(point_loads, start=1):
-                    csv_writer.writerow([idx, load_value, load_x])
+                csv_writer.writerow(["Load", "Magnitude (kN)", "Angle from +x (deg)", "Fx (kN)", "Fy (kN)", "Position x (m)"])
+                for idx, load in enumerate(point_load_details, start=1):
+                    csv_writer.writerow([idx, load["P"], load["angle"], load["Fx"], load["Fy"], load["x"]])
                 csv_writer.writerow([])
                 csv_writer.writerow(["Distributed Loads"])
                 csv_writer.writerow(["Load", "Shape", "Start x (m)", "End x (m)", "Peak intensity (kN/m)", "Direction"])
@@ -1098,7 +1117,7 @@ elif st.session_state.page == "Simulator":
                         "Educational simulation results",
                         "",
                         f"Beam length: {float(L):.3f} m",
-                        f"Applied midpoint moment: {float(moment):.3f} kN·m",
+                        f"Applied moment: {float(moment):.3f} kN·m at x={float(moment_x):.3f} m",
                         "",
                         "SUPPORT REACTIONS",
                     ]
@@ -1118,8 +1137,8 @@ elif st.session_state.page == "Simulator":
                     report_lines.append("Status: " + ("STATIC EQUILIBRIUM VERIFIED" if abs(sumFy) < 1e-5 and abs(sumMA) < 1e-5 else "REVIEW REQUIRED"))
                     report_lines += ["", "APPLIED POINT LOADS"]
                     if point_loads:
-                        for idx, (load_value, load_x) in enumerate(point_loads, start=1):
-                            report_lines.append(f"Load {idx}: {load_value:.3f} kN at x={load_x:.3f} m")
+                        for idx, load in enumerate(point_load_details, start=1):
+                            report_lines.append(f"Load {idx}: P={load['P']:.3f} kN at θ={load['angle']:.2f}° from +x, x={load['x']:.3f} m; Fx={load['Fx']:.3f} kN, Fy={load['Fy']:.3f} kN")
                     else:
                         report_lines.append("No point loads entered.")
                     report_lines += ["", "DISTRIBUTED LOADS"]
