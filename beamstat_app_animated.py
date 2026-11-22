@@ -590,13 +590,23 @@ def distributed_intensity(load, x):
     wmax = float(load.get("wmax", max(load.get("w0", 0.0), load.get("w1", 0.0))))
     if shape == "tent":
         peak = float(load["peak_x"])
+        w0 = float(load.get("w0", 0.0))
+        w1 = float(load.get("w1", 0.0))
         left_ratio = np.clip((x-a) / max(peak-a, 1e-12), 0.0, 1.0)
         right_ratio = np.clip((b-x) / max(b-peak, 1e-12), 0.0, 1.0)
-        return wmax * np.where(x <= peak, left_ratio, right_ratio)
+        left_values = w0 + (wmax-w0)*left_ratio
+        right_values = w1 + (wmax-w1)*right_ratio
+        return np.where(x <= peak, left_values, right_values)
     if shape == "triangular_increasing":
-        return wmax * np.clip((x-a) / max(b-a, 1e-12), 0.0, 1.0)
+        w0 = float(load.get("w0", 0.0))
+        w1 = float(load.get("w1", wmax))
+        ratio = np.clip((x-a) / max(b-a, 1e-12), 0.0, 1.0)
+        return w0 + (w1-w0)*ratio
     if shape == "triangular_decreasing":
-        return wmax * np.clip((b-x) / max(b-a, 1e-12), 0.0, 1.0)
+        w0 = float(load.get("w0", wmax))
+        w1 = float(load.get("w1", 0.0))
+        ratio = np.clip((x-a) / max(b-a, 1e-12), 0.0, 1.0)
+        return w0 + (w1-w0)*ratio
     if shape == "trapezoidal":
         w0 = float(load.get("w0", 0.0))
         w1 = float(load.get("w1", wmax))
@@ -932,21 +942,40 @@ elif st.session_state.page == "Simulator":
                 with c2:
                     b = st.number_input("End position b (m)", min_value=0.0, max_value=float(L), value=float(L), step=0.5, key=f"dist_b_{i}")
                 peak_x = None
-                if shape == "tent":
-                    peak_x = st.number_input("Peak position (m)", min_value=float(a), max_value=float(b), value=float((a+b)/2), step=0.5, key=f"dist_peak_{i}")
-                    st.caption("This load starts at zero, rises to its own peak height, then returns to zero.")
-                if shape == "trapezoidal":
+                if shape in ("tent", "triangular_increasing", "triangular_decreasing"):
+                    wmax = st.number_input("Maximum intensity wmax (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_wmax_{i}")
+                    h1, h2 = st.columns(2)
+                    if shape == "triangular_increasing":
+                        with h1:
+                            w0 = st.number_input("Starting height w₀ (kN/m)", min_value=0.0, value=0.0, step=1.0, key=f"dist_w0_{i}")
+                        with h2:
+                            w1 = st.number_input("Ending height w₁ (kN/m)", min_value=0.0, value=float(wmax), step=1.0, key=f"dist_w1_{i}")
+                        st.caption("The load varies linearly from your starting height to your ending height. Keep w₀ ≤ w₁ for an increasing profile. Maximum intensity is retained as a separate input.")
+                    elif shape == "triangular_decreasing":
+                        with h1:
+                            w0 = st.number_input("Starting height w₀ (kN/m)", min_value=0.0, value=float(wmax), step=1.0, key=f"dist_w0_{i}")
+                        with h2:
+                            w1 = st.number_input("Ending height w₁ (kN/m)", min_value=0.0, value=0.0, step=1.0, key=f"dist_w1_{i}")
+                        st.caption("The load varies linearly from your starting height to your ending height. Keep w₀ ≥ w₁ for a decreasing profile. Maximum intensity is retained as a separate input.")
+                    else:
+                        peak_x = st.number_input("Peak position (m)", min_value=float(a), max_value=float(b), value=float((a+b)/2), step=0.5, key=f"dist_peak_{i}")
+                        with h1:
+                            w0 = st.number_input("Starting height w₀ (kN/m)", min_value=0.0, value=0.0, step=1.0, key=f"dist_w0_{i}")
+                        with h2:
+                            w1 = st.number_input("Ending height w₁ (kN/m)", min_value=0.0, value=0.0, step=1.0, key=f"dist_w1_{i}")
+                        st.caption("The load rises from the starting height to the maximum intensity at the peak, then falls to the ending height.")
+                elif shape == "trapezoidal":
                     tc1, tc2 = st.columns(2)
                     with tc1:
                         w0 = st.number_input("Starting height w₀ (kN/m)", min_value=0.0, value=5.0, step=1.0, key=f"dist_w0_{i}")
                     with tc2:
                         w1 = st.number_input("Ending height w₁ (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_w1_{i}")
                     wmax = max(float(w0), float(w1))
-                    st.caption("This load has independently adjustable heights at both ends. It does not connect to another load unless their positions happen to meet.")
+                    st.caption("This load has independently adjustable heights at both ends.")
                 else:
                     wmax = st.number_input("Load height / maximum intensity (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_wmax_{i}")
-                    w0 = 0.0 if shape in ("triangular_increasing", "tent") else float(wmax)
-                    w1 = 0.0 if shape in ("triangular_decreasing", "tent") else float(wmax)
+                    w0 = float(wmax)
+                    w1 = float(wmax)
                 direction = st.selectbox("Direction", ["Downward", "Upward"], key=f"dist_dir_{i}")
                 distributed_loads.append({"type": shape, "a": float(a), "b": float(b),
                     "peak_x": None if peak_x is None else float(peak_x), "wmax": float(wmax),
@@ -972,6 +1001,14 @@ elif st.session_state.page == "Simulator":
                         raise ValueError(f"Distributed Load {i+1}: end position must be greater than start position.")
                     if load.get("type") == "tent" and not (load["a"] < load["peak_x"] < load["b"]):
                         raise ValueError(f"Distributed Load {i+1}: peak position must be between the start and end positions.")
+                    if load.get("type") in ("tent", "triangular_increasing", "triangular_decreasing"):
+                        w0, w1, wmax = float(load.get("w0", 0)), float(load.get("w1", 0)), float(load.get("wmax", 0))
+                        if w0 > wmax or w1 > wmax:
+                            raise ValueError(f"Distributed Load {i+1}: starting and ending heights cannot exceed the maximum intensity.")
+                        if load.get("type") == "triangular_increasing" and w0 > w1:
+                            raise ValueError(f"Distributed Load {i+1}: for an increasing triangle, starting height must be less than or equal to ending height.")
+                        if load.get("type") == "triangular_decreasing" and w0 < w1:
+                            raise ValueError(f"Distributed Load {i+1}: for a decreasing triangle, starting height must be greater than or equal to ending height.")
                 supports = []
                 for i, row in edited_supports.reset_index(drop=True).iterrows():
                     sx = float(row["Distance from A (m)"])
