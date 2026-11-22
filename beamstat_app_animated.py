@@ -852,7 +852,7 @@ elif st.session_state.page == "Simulator":
                 point_load_details.append({"P": float(p_mag), "angle": float(angle), "Fx": fx, "Fy": fy, "x": float(x)})
 
         st.markdown("**5. Distributed Loads**")
-        st.caption("Choose a load shape and position range. You can add multiple distributed loads, including loads that overlap or stack on the same beam region.")
+        st.caption("Choose a load shape and position range. You can add multiple distributed loads, including loads that overlap or stack on the same beam region. Use “Connect this load to the previous distributed load” to continue the same load shape with a matching shared height at the join.")
         distributed_count = st.number_input("Number of distributed loads", min_value=0, max_value=10, value=1, step=1, key="multi_distributed_count")
         distributed_loads = []
         shape_options = ["Rectangular (uniform)", "Triangular – increasing", "Triangular – decreasing", "Trapezoidal (varying both ends)", "Tent-shaped (peak in middle/inside)"]
@@ -865,11 +865,24 @@ elif st.session_state.page == "Simulator":
         }
         for i in range(int(distributed_count)):
             with st.expander(f"Distributed Load {i+1}", expanded=(i == 0)):
+                connected = False
+                previous = distributed_loads[i-1] if i > 0 and distributed_loads else None
+                if previous is not None:
+                    connected = st.checkbox(
+                        "Connect this load to the previous distributed load",
+                        value=False, key=f"dist_connect_{i}")
+                    if connected:
+                        st.caption("The new segment starts exactly where the previous one ends, and its starting height matches the previous ending intensity.")
                 shape_label = st.selectbox("Load shape", shape_options, key=f"dist_shape_{i}")
-                shape = shape_map[shape_label]
+                shape = "trapezoidal" if connected else shape_map[shape_label]
                 c1, c2 = st.columns(2)
                 with c1:
-                    a = st.number_input("Start position a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"dist_a_{i}")
+                    if connected:
+                        a = float(previous["b"])
+                        st.number_input("Start position a (m)", min_value=0.0, max_value=float(L), value=a,
+                                        step=0.5, key=f"dist_a_connected_{i}", disabled=True)
+                    else:
+                        a = st.number_input("Start position a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"dist_a_{i}")
                 with c2:
                     b = st.number_input("End position b (m)", min_value=0.0, max_value=float(L), value=float(L), step=0.5, key=f"dist_b_{i}")
                 peak_x = None
@@ -878,20 +891,36 @@ elif st.session_state.page == "Simulator":
                     st.caption("The load starts at zero, rises to the maximum at the peak, then returns to zero.")
                 if shape == "trapezoidal":
                     tc1, tc2 = st.columns(2)
-                    with tc1:
-                        w0 = st.number_input("Intensity at start a (kN/m)", min_value=0.0, value=5.0, step=1.0, key=f"dist_w0_{i}")
-                    with tc2:
-                        w1 = st.number_input("Intensity at end b (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_w1_{i}")
+                    if connected:
+                        previous_end = float(distributed_intensity(previous, previous["b"]))
+                        with tc1:
+                            st.number_input("Connected starting intensity (kN/m)", min_value=0.0,
+                                            value=previous_end, step=1.0, key=f"dist_w0_connected_{i}", disabled=True)
+                            w0 = previous_end
+                        with tc2:
+                            w1 = st.number_input("Intensity at end b (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_w1_{i}")
+                    else:
+                        with tc1:
+                            w0 = st.number_input("Intensity at start a (kN/m)", min_value=0.0, value=5.0, step=1.0, key=f"dist_w0_{i}")
+                        with tc2:
+                            w1 = st.number_input("Intensity at end b (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_w1_{i}")
                     wmax = max(float(w0), float(w1))
                     st.caption("Intensity varies linearly from the start value to the end value.")
                 else:
                     wmax = st.number_input("Maximum intensity (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_wmax_{i}")
                     w0 = 0.0 if shape in ("triangular_increasing", "tent") else float(wmax)
                     w1 = 0.0 if shape in ("triangular_decreasing", "tent") else float(wmax)
-                direction = st.selectbox("Direction", ["Downward", "Upward"], key=f"dist_dir_{i}")
+                direction_options = ["Downward", "Upward"]
+                if connected:
+                    direction = previous.get("direction", "Downward")
+                    st.selectbox("Direction", direction_options, index=direction_options.index(direction),
+                                 key=f"dist_dir_connected_{i}", disabled=True)
+                else:
+                    direction = st.selectbox("Direction", direction_options, key=f"dist_dir_{i}")
                 distributed_loads.append({"type": shape, "a": float(a), "b": float(b),
                     "peak_x": None if peak_x is None else float(peak_x), "wmax": float(wmax),
-                    "w0": float(w0), "w1": float(w1), "direction": direction})
+                    "w0": float(w0), "w1": float(w1), "direction": direction,
+                    "connected_to_previous": bool(connected)})
         st.markdown("**6. Applied Moment**")
         mc1, mc2 = st.columns(2)
         with mc1:
@@ -1048,9 +1077,13 @@ elif st.session_state.page == "Simulator":
                             else:
                                 ax.annotate("", xy=(xx,arrow_top-.025), xytext=(xx,.045),
                                     arrowprops=dict(arrowstyle="-|>", color=envelope_color, lw=1.0), zorder=4)
-                        ax.plot([load["a"], load["a"]], [.045, arrow_tops[0]], color=envelope_color, lw=2.2, zorder=8)
+                        if not load.get("connected_to_previous", False):
+                            ax.plot([load["a"], load["a"]], [.045, arrow_tops[0]], color=envelope_color, lw=2.2, zorder=8)
                         ax.plot(xs, arrow_tops, color=envelope_color, lw=2.2, zorder=8)
-                        ax.plot([load["b"], load["b"]], [arrow_tops[-1], .045], color=envelope_color, lw=2.2, zorder=8)
+                        next_is_connected = (load_index + 1 < len(distributed_loads)
+                                             and distributed_loads[load_index + 1].get("connected_to_previous", False))
+                        if not next_is_connected:
+                            ax.plot([load["b"], load["b"]], [arrow_tops[-1], .045], color=envelope_color, lw=2.2, zorder=8)
                         shape_labels = {
                             "rectangular": "Rectangular", "triangular_increasing": "Triangle increasing",
                             "triangular_decreasing": "Triangle decreasing", "trapezoidal": "Trapezoidal",
