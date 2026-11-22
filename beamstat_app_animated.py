@@ -781,12 +781,14 @@ elif st.session_state.page == "Simulator":
             st.session_state["dist_wmax_0"] = 10.0
             st.session_state["dist_dir_0"] = "Downward"
             st.session_state["dist_shape_1"] = "Trapezoidal (varying both ends)"
+            st.session_state["dist_connect_1"] = True
             st.session_state["dist_a_1"] = 2.0
             st.session_state["dist_b_1"] = 3.7
             st.session_state["dist_w0_1"] = 10.0
             st.session_state["dist_w1_1"] = 25.0
             st.session_state["dist_dir_1"] = "Downward"
             st.session_state["dist_shape_2"] = "Trapezoidal (varying both ends)"
+            st.session_state["dist_connect_2"] = True
             st.session_state["dist_a_2"] = 3.7
             st.session_state["dist_b_2"] = 7.7
             st.session_state["dist_w0_2"] = 25.0
@@ -902,11 +904,37 @@ elif st.session_state.page == "Simulator":
         }
         for i in range(int(distributed_count)):
             with st.expander(f"Distributed Load {i+1}", expanded=(i == 0)):
-                shape_label = st.selectbox("Load shape", shape_options, key=f"dist_shape_{i}")
-                shape = shape_map[shape_label]
+                connected = False
+                previous_end_intensity = None
+                previous_end_position = None
+                if i > 0 and distributed_loads:
+                    connected = st.checkbox(
+                        "Connect this load to the previous distributed load",
+                        key=f"dist_connect_{i}",
+                        help="Automatically use the previous load's ending position and intensity as this load's starting point."
+                    )
+                    if connected:
+                        previous = distributed_loads[-1]
+                        previous_end_position = float(previous["b"])
+                        previous_end_intensity = float(distributed_intensity(previous, np.array([previous_end_position]))[0])
+                        st.info(
+                            f"Connected start: x = {previous_end_position:g} m, "
+                            f"w = {previous_end_intensity:g} kN/m. The starting point and height are linked automatically."
+                        )
+                if connected:
+                    shape_label = "Trapezoidal (varying both ends)"
+                    shape = "trapezoidal"
+                    st.selectbox("Load shape", [shape_label], key=f"dist_shape_linked_{i}", disabled=True)
+                else:
+                    shape_label = st.selectbox("Load shape", shape_options, key=f"dist_shape_{i}")
+                    shape = shape_map[shape_label]
                 c1, c2 = st.columns(2)
                 with c1:
-                    a = st.number_input("Start position a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"dist_a_{i}")
+                    if connected:
+                        a = previous_end_position
+                        st.text_input("Start position a (m)", value=f"{a:g} (linked)", disabled=True, key=f"dist_a_linked_display_{i}")
+                    else:
+                        a = st.number_input("Start position a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"dist_a_{i}")
                 with c2:
                     b = st.number_input("End position b (m)", min_value=0.0, max_value=float(L), value=float(L), step=0.5, key=f"dist_b_{i}")
                 peak_x = None
@@ -916,7 +944,11 @@ elif st.session_state.page == "Simulator":
                 if shape == "trapezoidal":
                     tc1, tc2 = st.columns(2)
                     with tc1:
-                        w0 = st.number_input("Intensity at start a (kN/m)", min_value=0.0, value=5.0, step=1.0, key=f"dist_w0_{i}")
+                        if connected:
+                            w0 = previous_end_intensity
+                            st.text_input("Intensity at start a (kN/m)", value=f"{w0:g} (linked)", disabled=True, key=f"dist_w0_linked_display_{i}")
+                        else:
+                            w0 = st.number_input("Intensity at start a (kN/m)", min_value=0.0, value=5.0, step=1.0, key=f"dist_w0_{i}")
                     with tc2:
                         w1 = st.number_input("Intensity at end b (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_w1_{i}")
                     wmax = max(float(w0), float(w1))
