@@ -754,10 +754,47 @@ if st.session_state.page == "Home":
 
 elif st.session_state.page == "Simulator":
     st.markdown('<h1 class="section-title">Beam Reaction Simulator</h1>', unsafe_allow_html=True)
-    st.caption("Add two or more supports at any position along the beam, then enter loads and calculate the reactions. This model covers vertical loading and beam bending.")
+    st.caption("Add supports and loads, then calculate reactions. Inclined point loads are drawn at their actual angle and resolved into components; the current beam solver uses the vertical component for bending only.")
     input_col, result_col = st.columns([.95, 1.65], gap="medium")
     with input_col:
         st.markdown('<div class="panel-title">⚙️  1. Beam Configuration</div>', unsafe_allow_html=True)
+        st.caption("Load the reference problem to populate its dimensions, supports, connected distributed-load profile, inclined force, and applied couple.")
+        if st.button("Load exact reference diagram", key="load_reference_beam_problem", use_container_width=True):
+            # Populate Streamlit widget state before the corresponding widgets are created.
+            st.session_state["beam_length_multi"] = 8.7
+            st.session_state["beamstat_support_rows"] = [
+                {"uid": "A", "label": "A", "x": 2.0, "type": "Roller"},
+                {"uid": "B", "label": "B", "x": 7.7, "type": "Pin"},
+            ]
+            st.session_state["beamstat_analysis_points"] = [
+                {"label": "A", "x": 2.0}, {"label": "B", "x": 7.7}
+            ]
+            st.session_state["point_load_count_multi"] = 1
+            st.session_state["multi_p_0"] = 12.0
+            st.session_state["multi_angle_0"] = 240.0
+            st.session_state["multi_x_0"] = 8.7
+            st.session_state["multi_distributed_count"] = 3
+            # Continuous profile: 10 -> 10 -> 25 -> 0 kN/m.
+            st.session_state["dist_shape_0"] = "Rectangular (uniform)"
+            st.session_state["dist_a_0"] = 0.0
+            st.session_state["dist_b_0"] = 2.0
+            st.session_state["dist_wmax_0"] = 10.0
+            st.session_state["dist_dir_0"] = "Downward"
+            st.session_state["dist_shape_1"] = "Trapezoidal (varying both ends)"
+            st.session_state["dist_a_1"] = 2.0
+            st.session_state["dist_b_1"] = 3.7
+            st.session_state["dist_w0_1"] = 10.0
+            st.session_state["dist_w1_1"] = 25.0
+            st.session_state["dist_dir_1"] = "Downward"
+            st.session_state["dist_shape_2"] = "Trapezoidal (varying both ends)"
+            st.session_state["dist_a_2"] = 3.7
+            st.session_state["dist_b_2"] = 7.7
+            st.session_state["dist_w0_2"] = 25.0
+            st.session_state["dist_w1_2"] = 0.0
+            st.session_state["dist_dir_2"] = "Downward"
+            st.session_state["multi_moment"] = -10.0
+            st.session_state["multi_moment_x"] = 8.0
+            st.rerun()
         L = st.number_input("Total beam length L (m)", min_value=0.1, value=8.0, step=0.5, key="beam_length_multi")
         st.markdown("**2. Supports (minimum 2)**")
         st.caption("Click Add Support, then choose its support type and enter its distance from the left end of the beam.")
@@ -852,7 +889,7 @@ elif st.session_state.page == "Simulator":
                 point_load_details.append({"P": float(p_mag), "angle": float(angle), "Fx": fx, "Fy": fy, "x": float(x)})
 
         st.markdown("**5. Distributed Loads**")
-        st.caption("Choose a load shape and position range. You can add multiple distributed loads, including loads that overlap or stack on the same beam region. Use “Connect this load to the previous distributed load” to continue the same load shape with a matching shared height at the join.")
+        st.caption("Choose a load shape and position range. You can add multiple distributed loads, including loads that overlap or stack on the same beam region.")
         distributed_count = st.number_input("Number of distributed loads", min_value=0, max_value=10, value=1, step=1, key="multi_distributed_count")
         distributed_loads = []
         shape_options = ["Rectangular (uniform)", "Triangular – increasing", "Triangular – decreasing", "Trapezoidal (varying both ends)", "Tent-shaped (peak in middle/inside)"]
@@ -865,24 +902,11 @@ elif st.session_state.page == "Simulator":
         }
         for i in range(int(distributed_count)):
             with st.expander(f"Distributed Load {i+1}", expanded=(i == 0)):
-                connected = False
-                previous = distributed_loads[i-1] if i > 0 and distributed_loads else None
-                if previous is not None:
-                    connected = st.checkbox(
-                        "Connect this load to the previous distributed load",
-                        value=False, key=f"dist_connect_{i}")
-                    if connected:
-                        st.caption("The new segment starts exactly where the previous one ends, and its starting height matches the previous ending intensity.")
                 shape_label = st.selectbox("Load shape", shape_options, key=f"dist_shape_{i}")
-                shape = "trapezoidal" if connected else shape_map[shape_label]
+                shape = shape_map[shape_label]
                 c1, c2 = st.columns(2)
                 with c1:
-                    if connected:
-                        a = float(previous["b"])
-                        st.number_input("Start position a (m)", min_value=0.0, max_value=float(L), value=a,
-                                        step=0.5, key=f"dist_a_connected_{i}", disabled=True)
-                    else:
-                        a = st.number_input("Start position a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"dist_a_{i}")
+                    a = st.number_input("Start position a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"dist_a_{i}")
                 with c2:
                     b = st.number_input("End position b (m)", min_value=0.0, max_value=float(L), value=float(L), step=0.5, key=f"dist_b_{i}")
                 peak_x = None
@@ -891,43 +915,27 @@ elif st.session_state.page == "Simulator":
                     st.caption("The load starts at zero, rises to the maximum at the peak, then returns to zero.")
                 if shape == "trapezoidal":
                     tc1, tc2 = st.columns(2)
-                    if connected:
-                        previous_end = float(distributed_intensity(previous, previous["b"]))
-                        with tc1:
-                            st.number_input("Connected starting intensity (kN/m)", min_value=0.0,
-                                            value=previous_end, step=1.0, key=f"dist_w0_connected_{i}", disabled=True)
-                            w0 = previous_end
-                        with tc2:
-                            w1 = st.number_input("Intensity at end b (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_w1_{i}")
-                    else:
-                        with tc1:
-                            w0 = st.number_input("Intensity at start a (kN/m)", min_value=0.0, value=5.0, step=1.0, key=f"dist_w0_{i}")
-                        with tc2:
-                            w1 = st.number_input("Intensity at end b (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_w1_{i}")
+                    with tc1:
+                        w0 = st.number_input("Intensity at start a (kN/m)", min_value=0.0, value=5.0, step=1.0, key=f"dist_w0_{i}")
+                    with tc2:
+                        w1 = st.number_input("Intensity at end b (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_w1_{i}")
                     wmax = max(float(w0), float(w1))
                     st.caption("Intensity varies linearly from the start value to the end value.")
                 else:
                     wmax = st.number_input("Maximum intensity (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_wmax_{i}")
                     w0 = 0.0 if shape in ("triangular_increasing", "tent") else float(wmax)
                     w1 = 0.0 if shape in ("triangular_decreasing", "tent") else float(wmax)
-                direction_options = ["Downward", "Upward"]
-                if connected:
-                    direction = previous.get("direction", "Downward")
-                    st.selectbox("Direction", direction_options, index=direction_options.index(direction),
-                                 key=f"dist_dir_connected_{i}", disabled=True)
-                else:
-                    direction = st.selectbox("Direction", direction_options, key=f"dist_dir_{i}")
+                direction = st.selectbox("Direction", ["Downward", "Upward"], key=f"dist_dir_{i}")
                 distributed_loads.append({"type": shape, "a": float(a), "b": float(b),
                     "peak_x": None if peak_x is None else float(peak_x), "wmax": float(wmax),
-                    "w0": float(w0), "w1": float(w1), "direction": direction,
-                    "connected_to_previous": bool(connected)})
+                    "w0": float(w0), "w1": float(w1), "direction": direction})
         st.markdown("**6. Applied Moment**")
         mc1, mc2 = st.columns(2)
         with mc1:
             moment = st.number_input("Moment magnitude (kN·m; CCW positive)", value=0.0, step=1.0, key="multi_moment")
         with mc2:
             moment_x = st.number_input("Moment position x (m)", min_value=0.0, max_value=float(L), value=float(L)/2, step=0.5, key="multi_moment_x")
-        st.caption("The applied couple can be positioned anywhere from the left end (x = 0) to the right end (x = L). Positive values are counterclockwise.")
+        st.caption("The applied couple can be positioned anywhere from x = 0 to x = L. Positive values are counterclockwise; negative values are clockwise. The reference preset places its couple at x = 8.0 m, estimated from the illustration.")
         EI = 20000.0  # Internal constant used by the solver.
         calculate = st.button("▦  Calculate Reactions  →", use_container_width=True, type="primary", key="multi_calculate")
 
@@ -1051,14 +1059,25 @@ elif st.session_state.page == "Simulator":
                     px = point["x"]
                     ax.axvline(px, ymin=.28, ymax=.72, color="#94a3b8", lw=1, ls="--", alpha=.8, zorder=1)
                     add_diagram_label(px, f"Point {point['label']}", "#7c3aed", weight="bold")
-                for i, (p_down,x) in enumerate(point_loads):
-                    if abs(p_down) > 1e-10:
-                        if p_down > 0:
-                            ax.annotate("",xy=(x,.04),xytext=(x,.78),arrowprops=dict(arrowstyle="-|>",color="#e13b32",lw=2))
-                            add_diagram_label(x, f"{abs(p_down):g} kN ↓", "#c52e28")
-                        else:
-                            ax.annotate("",xy=(x,.78),xytext=(x,.04),arrowprops=dict(arrowstyle="-|>",color="#07833b",lw=2))
-                            add_diagram_label(x, f"{abs(p_down):g} kN ↑", "#07833b")
+                # Draw point loads at their actual input angles (measured from +x).
+                # The current beam FE solver uses only Fy for bending; Fx is shown and
+                # reported but is not included in axial/horizontal reaction analysis.
+                for i, detail in enumerate(point_load_details):
+                    p_mag, angle_deg, x = detail["P"], detail["angle"], detail["x"]
+                    if p_mag > 1e-10:
+                        theta = np.radians(angle_deg)
+                        dx, dy = np.cos(theta), np.sin(theta)
+                        arrow_len = 0.82
+                        tail = (x - arrow_len*dx, .08 - arrow_len*dy)
+                        head = (x, .08)
+                        color = "#e13b32" if detail["Fy"] < -1e-9 else "#07833b"
+                        ax.annotate("", xy=head, xytext=tail,
+                                    arrowprops=dict(arrowstyle="-|>", color=color, lw=2.2), zorder=9)
+                        add_diagram_label(x, f"{p_mag:g} kN @ {angle_deg:g}°", color)
+                profile_max_intensity = max(
+                    [float(np.max(distributed_intensity(load, np.linspace(load["a"], load["b"], 25))))
+                     for load in distributed_loads if load["b"] > load["a"]] or [1.0]
+                )
                 for load_index, load in enumerate(distributed_loads):
                     if load["b"] > load["a"] and float(load.get("wmax", max(load.get("w0", 0), load.get("w1", 0)))) > 0:
                         if load.get("type") == "tent":
@@ -1067,8 +1086,9 @@ elif st.session_state.page == "Simulator":
                         else:
                             xs = np.linspace(load["a"], load["b"], 17)
                         intensities = distributed_intensity(load, xs)
-                        max_intensity = max(float(np.max(intensities)), 1e-9)
-                        arrow_tops = .04 + (.08 + .42*intensities/max_intensity)
+                        # Use one shared intensity scale across every segment so
+                        # adjoining loads form the same continuous height profile.
+                        arrow_tops = .04 + (.08 + .42*intensities/max(profile_max_intensity, 1e-9))
                         envelope_color = "#3182BD" if load["direction"] == "Downward" else "#07833b"
                         for xx, arrow_top in zip(xs, arrow_tops):
                             if load["direction"] == "Downward":
@@ -1077,13 +1097,9 @@ elif st.session_state.page == "Simulator":
                             else:
                                 ax.annotate("", xy=(xx,arrow_top-.025), xytext=(xx,.045),
                                     arrowprops=dict(arrowstyle="-|>", color=envelope_color, lw=1.0), zorder=4)
-                        if not load.get("connected_to_previous", False):
-                            ax.plot([load["a"], load["a"]], [.045, arrow_tops[0]], color=envelope_color, lw=2.2, zorder=8)
+                        ax.plot([load["a"], load["a"]], [.045, arrow_tops[0]], color=envelope_color, lw=2.2, zorder=8)
                         ax.plot(xs, arrow_tops, color=envelope_color, lw=2.2, zorder=8)
-                        next_is_connected = (load_index + 1 < len(distributed_loads)
-                                             and distributed_loads[load_index + 1].get("connected_to_previous", False))
-                        if not next_is_connected:
-                            ax.plot([load["b"], load["b"]], [arrow_tops[-1], .045], color=envelope_color, lw=2.2, zorder=8)
+                        ax.plot([load["b"], load["b"]], [arrow_tops[-1], .045], color=envelope_color, lw=2.2, zorder=8)
                         shape_labels = {
                             "rectangular": "Rectangular", "triangular_increasing": "Triangle increasing",
                             "triangular_decreasing": "Triangle decreasing", "trapezoidal": "Trapezoidal",
@@ -1100,8 +1116,18 @@ elif st.session_state.page == "Simulator":
                     add_diagram_label(mx, f"M = {moment:g} kN·m", "#8b36d9")
                 lowest_label_y = -0.43 - max(0, len(label_lanes)-1)*0.24
                 dimension_y = lowest_label_y - 0.58
-                ax.annotate("",xy=(L,dimension_y),xytext=(0,dimension_y),arrowprops=dict(arrowstyle="<->",color="#64748b"))
-                ax.text(L/2,dimension_y-.14,f"L = {L:.2f} m",ha="center",fontsize=8,color="#475569")
+                # Dimension chain for the reference problem: 2.0 + 1.7 + 4.0 + 1.0 m.
+                if abs(float(L)-8.7) < 1e-6:
+                    dim_breaks = [0.0, 2.0, 3.7, 7.7, 8.7]
+                    for dim_a, dim_b in zip(dim_breaks[:-1], dim_breaks[1:]):
+                        ax.annotate("", xy=(dim_b, dimension_y), xytext=(dim_a, dimension_y),
+                                    arrowprops=dict(arrowstyle="<->", color="#64748b", lw=1.0))
+                        ax.text((dim_a+dim_b)/2, dimension_y-.13, f"{dim_b-dim_a:.1f} m",
+                                ha="center", va="top", fontsize=8, color="#475569")
+                else:
+                    ax.annotate("",xy=(L,dimension_y),xytext=(0,dimension_y),
+                                arrowprops=dict(arrowstyle="<->",color="#64748b"))
+                    ax.text(L/2,dimension_y-.13,f"L = {L:.2f} m",ha="center",va="top",fontsize=8,color="#475569")
                 ax.set_xlim(-.45,L+.45); ax.set_ylim(dimension_y-.42,1.35); ax.axis("off")
                 ax.tick_params(colors=chart_fg)
                 diagram_png = io.BytesIO()
