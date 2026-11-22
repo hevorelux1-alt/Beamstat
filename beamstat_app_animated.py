@@ -754,11 +754,11 @@ if st.session_state.page == "Home":
 
 elif st.session_state.page == "Simulator":
     st.markdown('<h1 class="section-title">Beam Reaction Simulator</h1>', unsafe_allow_html=True)
-    st.caption("Add supports and loads, then calculate reactions. Inclined point loads are drawn at their actual angle and resolved into components; the current beam solver uses the vertical component for bending only.")
+    st.caption("Add supports and loads, then calculate reactions. Point loads can be upward, downward, or angled with a custom direction. Distributed loads are independent and may overlap or stack.")
     input_col, result_col = st.columns([.95, 1.65], gap="medium")
     with input_col:
         st.markdown('<div class="panel-title">⚙️  1. Beam Configuration</div>', unsafe_allow_html=True)
-        st.caption("Load the reference problem to populate its dimensions, supports, connected distributed-load profile, inclined force, and applied couple.")
+        st.caption("Load the reference problem to populate its dimensions, supports, independently adjustable distributed loads, inclined force, and applied couple.")
         if st.button("Load exact reference diagram", key="load_reference_beam_problem", use_container_width=True):
             # Populate Streamlit widget state before the corresponding widgets are created.
             st.session_state["beam_length_multi"] = 8.7
@@ -772,6 +772,7 @@ elif st.session_state.page == "Simulator":
             st.session_state["point_load_count_multi"] = 1
             st.session_state["multi_p_0"] = 12.0
             st.session_state["multi_angle_0"] = 240.0
+            st.session_state["multi_direction_0"] = "Angled (custom angle)"
             st.session_state["multi_x_0"] = 8.7
             st.session_state["multi_distributed_count"] = 3
             # Continuous profile: 10 -> 10 -> 25 -> 0 kN/m.
@@ -781,14 +782,12 @@ elif st.session_state.page == "Simulator":
             st.session_state["dist_wmax_0"] = 10.0
             st.session_state["dist_dir_0"] = "Downward"
             st.session_state["dist_shape_1"] = "Trapezoidal (varying both ends)"
-            st.session_state["dist_connect_1"] = True
             st.session_state["dist_a_1"] = 2.0
             st.session_state["dist_b_1"] = 3.7
             st.session_state["dist_w0_1"] = 10.0
             st.session_state["dist_w1_1"] = 25.0
             st.session_state["dist_dir_1"] = "Downward"
             st.session_state["dist_shape_2"] = "Trapezoidal (varying both ends)"
-            st.session_state["dist_connect_2"] = True
             st.session_state["dist_a_2"] = 3.7
             st.session_state["dist_b_2"] = 7.7
             st.session_state["dist_w0_2"] = 25.0
@@ -880,15 +879,35 @@ elif st.session_state.page == "Simulator":
                 with pc1:
                     p_mag = st.number_input(f"P{i+1} magnitude (kN)", min_value=0.0, value=0.0, step=1.0, key=f"multi_p_{i}")
                 with pc2:
-                    angle = st.number_input(f"Angle θ{i+1} (° from +x)", min_value=-360.0, max_value=360.0, value=-90.0, step=5.0, key=f"multi_angle_{i}")
+                    load_direction = st.selectbox(
+                        f"Direction of Load {i+1}",
+                        ["Downward", "Upward", "Angled (custom angle)"],
+                        key=f"multi_direction_{i}",
+                        help="Choose a vertical direction or enter an angle for an inclined force."
+                    )
                 with pc3:
                     x = st.number_input(f"Position x{i+1} (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"multi_x_{i}")
+
+                if load_direction == "Downward":
+                    angle = -90.0
+                    st.caption("↓ Downward vertical force · Angle = −90° from the positive horizontal axis (+x).")
+                elif load_direction == "Upward":
+                    angle = 90.0
+                    st.caption("↑ Upward vertical force · Angle = +90° from the positive horizontal axis (+x).")
+                else:
+                    angle = st.number_input(
+                        f"Custom angle θ{i+1} (degrees from +x)",
+                        min_value=-360.0, max_value=360.0, value=240.0, step=5.0,
+                        key=f"multi_angle_{i}"
+                    )
+                    st.caption("Angle convention: 0° → right, 90° ↑ up, 180° ← left, 270° / −90° ↓ down. Enter any angle from −360° to 360°.")
+
                 fx = float(p_mag) * float(np.cos(np.radians(angle)))
                 fy = float(p_mag) * float(np.sin(np.radians(angle)))
-                st.caption(f"Components: Fx = {fx:.3f} kN · Fy = {fy:.3f} kN ({'upward' if fy > 1e-9 else 'downward' if fy < -1e-9 else 'zero vertical'})")
-                # The beam-bending solver uses signed vertical load (positive downward).
+                st.caption(f"Resolved components: Fx = {fx:.3f} kN · Fy = {fy:.3f} kN ({'upward' if fy > 1e-9 else 'downward' if fy < -1e-9 else 'horizontal'})")
+                # Solver convention: positive p is downward; negative p is upward.
                 point_loads.append((-fy, float(x)))
-                point_load_details.append({"P": float(p_mag), "angle": float(angle), "Fx": fx, "Fy": fy, "x": float(x)})
+                point_load_details.append({"P": float(p_mag), "angle": float(angle), "Fx": fx, "Fy": fy, "x": float(x), "direction_choice": load_direction})
 
         st.markdown("**5. Distributed Loads**")
         st.caption("Choose a load shape and position range. You can add multiple distributed loads, including loads that overlap or stack on the same beam region.")
@@ -904,63 +923,35 @@ elif st.session_state.page == "Simulator":
         }
         for i in range(int(distributed_count)):
             with st.expander(f"Distributed Load {i+1}", expanded=(i == 0)):
-                connected = False
-                previous_end_intensity = None
-                previous_end_position = None
-                if i > 0 and distributed_loads:
-                    connected = st.checkbox(
-                        "Connect this load to the previous distributed load",
-                        key=f"dist_connect_{i}",
-                        help="Automatically use the previous load's ending position and intensity as this load's starting point."
-                    )
-                    if connected:
-                        previous = distributed_loads[-1]
-                        previous_end_position = float(previous["b"])
-                        previous_end_intensity = float(distributed_intensity(previous, np.array([previous_end_position]))[0])
-                        st.info(
-                            f"Connected start: x = {previous_end_position:g} m, "
-                            f"w = {previous_end_intensity:g} kN/m. The starting point and height are linked automatically."
-                        )
-                if connected:
-                    shape_label = "Trapezoidal (varying both ends)"
-                    shape = "trapezoidal"
-                    st.selectbox("Load shape", [shape_label], key=f"dist_shape_linked_{i}", disabled=True)
-                else:
-                    shape_label = st.selectbox("Load shape", shape_options, key=f"dist_shape_{i}")
-                    shape = shape_map[shape_label]
+                st.caption("Each distributed load is independent. Set its own start/end positions and heights. Loads may overlap or stack; their effects are added together in the analysis.")
+                shape_label = st.selectbox("Load shape", shape_options, key=f"dist_shape_{i}")
+                shape = shape_map[shape_label]
                 c1, c2 = st.columns(2)
                 with c1:
-                    if connected:
-                        a = previous_end_position
-                        st.text_input("Start position a (m)", value=f"{a:g} (linked)", disabled=True, key=f"dist_a_linked_display_{i}")
-                    else:
-                        a = st.number_input("Start position a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"dist_a_{i}")
+                    a = st.number_input("Start position a (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"dist_a_{i}")
                 with c2:
                     b = st.number_input("End position b (m)", min_value=0.0, max_value=float(L), value=float(L), step=0.5, key=f"dist_b_{i}")
                 peak_x = None
                 if shape == "tent":
                     peak_x = st.number_input("Peak position (m)", min_value=float(a), max_value=float(b), value=float((a+b)/2), step=0.5, key=f"dist_peak_{i}")
-                    st.caption("The load starts at zero, rises to the maximum at the peak, then returns to zero.")
+                    st.caption("This load starts at zero, rises to its own peak height, then returns to zero.")
                 if shape == "trapezoidal":
                     tc1, tc2 = st.columns(2)
                     with tc1:
-                        if connected:
-                            w0 = previous_end_intensity
-                            st.text_input("Intensity at start a (kN/m)", value=f"{w0:g} (linked)", disabled=True, key=f"dist_w0_linked_display_{i}")
-                        else:
-                            w0 = st.number_input("Intensity at start a (kN/m)", min_value=0.0, value=5.0, step=1.0, key=f"dist_w0_{i}")
+                        w0 = st.number_input("Starting height w₀ (kN/m)", min_value=0.0, value=5.0, step=1.0, key=f"dist_w0_{i}")
                     with tc2:
-                        w1 = st.number_input("Intensity at end b (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_w1_{i}")
+                        w1 = st.number_input("Ending height w₁ (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_w1_{i}")
                     wmax = max(float(w0), float(w1))
-                    st.caption("Intensity varies linearly from the start value to the end value.")
+                    st.caption("This load has independently adjustable heights at both ends. It does not connect to another load unless their positions happen to meet.")
                 else:
-                    wmax = st.number_input("Maximum intensity (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_wmax_{i}")
+                    wmax = st.number_input("Load height / maximum intensity (kN/m)", min_value=0.0, value=10.0, step=1.0, key=f"dist_wmax_{i}")
                     w0 = 0.0 if shape in ("triangular_increasing", "tent") else float(wmax)
                     w1 = 0.0 if shape in ("triangular_decreasing", "tent") else float(wmax)
                 direction = st.selectbox("Direction", ["Downward", "Upward"], key=f"dist_dir_{i}")
                 distributed_loads.append({"type": shape, "a": float(a), "b": float(b),
                     "peak_x": None if peak_x is None else float(peak_x), "wmax": float(wmax),
                     "w0": float(w0), "w1": float(w1), "direction": direction})
+
         st.markdown("**6. Applied Moment**")
         mc1, mc2 = st.columns(2)
         with mc1:
@@ -1100,8 +1091,8 @@ elif st.session_state.page == "Simulator":
                         theta = np.radians(angle_deg)
                         dx, dy = np.cos(theta), np.sin(theta)
                         arrow_len = 0.82
-                        tail = (x - arrow_len*dx, .08 - arrow_len*dy)
-                        head = (x, .08)
+                        tail = (x, .08)
+                        head = (x + arrow_len*dx, .08 + arrow_len*dy)
                         color = "#e13b32" if detail["Fy"] < -1e-9 else "#07833b"
                         ax.annotate("", xy=head, xytext=tail,
                                     arrowprops=dict(arrowstyle="-|>", color=color, lw=2.2), zorder=9)
