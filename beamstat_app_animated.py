@@ -806,7 +806,7 @@ elif st.session_state.page == "Simulator":
             st.session_state["multi_moment"] = -10.0
             st.session_state["multi_moment_x"] = 8.0
             st.rerun()
-        L = st.number_input("Total beam length L (m)", min_value=0.1, value=0     .0, step=0.5, key="beam_length_multi")
+        L = st.number_input("Total beam length L (m)", min_value=0.1, value=0.0, step=0.5, key="beam_length_multi")
         st.markdown("**2. Supports (minimum 2)**")
         st.caption("Click Add Support, then choose its support type and enter its distance from the left end of the beam.")
         if "beamstat_support_rows" not in st.session_state:
