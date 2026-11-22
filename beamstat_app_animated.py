@@ -764,7 +764,7 @@ if st.session_state.page == "Home":
 
 elif st.session_state.page == "Simulator":
     st.markdown('<h1 class="section-title">Beam Reaction Simulator</h1>', unsafe_allow_html=True)
-    st.caption("Add supports and loads, then calculate reactions. Point loads can be upward, downward, or angled with a custom direction. Distributed loads are independent and may overlap or stack.")
+    st.caption("Add supports and loads, then calculate reactions. Point loads can be vertical upward/downward or inclined upward/downward, with inclination angles limited to 0°–180°. Distributed loads are independent and may overlap or stack.")
     input_col, result_col = st.columns([.95, 1.65], gap="medium")
     with input_col:
         st.markdown('<div class="panel-title">⚙️  1. Beam Configuration</div>', unsafe_allow_html=True)
@@ -879,7 +879,7 @@ elif st.session_state.page == "Simulator":
                 analysis_points.append({"label": point_label.strip() or f"P{i+1}", "x": float(px)})
 
         st.markdown("**4. Applied Point Loads**")
-        st.caption("Enter the force magnitude and its angle measured counterclockwise from the positive horizontal axis (+x).")
+        st.caption("Choose a vertical load or an inclined load. For inclined loads, select whether it points upward or downward and enter an angle from 0° to 180° measured from the positive horizontal axis (+x).")
         point_count = st.number_input("Number of point loads", min_value=0, max_value=10, value=2, step=1, key="point_load_count_multi")
         point_loads = []
         point_load_details = []
@@ -890,34 +890,46 @@ elif st.session_state.page == "Simulator":
                     p_mag = st.number_input(f"P{i+1} magnitude (kN)", min_value=0.0, value=0.0, step=1.0, key=f"multi_p_{i}")
                 with pc2:
                     load_direction = st.selectbox(
-                        f"Direction of Load {i+1}",
-                        ["Downward", "Upward", "Angled (custom angle)"],
+                        f"Load type {i+1}",
+                        ["Downward", "Upward", "Inclined downward", "Inclined upward"],
                         key=f"multi_direction_{i}",
-                        help="Choose a vertical direction or enter an angle for an inclined force."
+                        help="Choose a vertical load or an inclined load. Inclined loads have a separate upward/downward choice."
                     )
                 with pc3:
                     x = st.number_input(f"Position x{i+1} (m)", min_value=0.0, max_value=float(L), value=0.0, step=0.5, key=f"multi_x_{i}")
 
                 if load_direction == "Downward":
-                    angle = -90.0
-                    st.caption("↓ Downward vertical force · Angle = −90° from the positive horizontal axis (+x).")
+                    angle = 270.0
+                    st.caption("↓ Vertical downward load. No angle input is needed.")
                 elif load_direction == "Upward":
                     angle = 90.0
-                    st.caption("↑ Upward vertical force · Angle = +90° from the positive horizontal axis (+x).")
+                    st.caption("↑ Vertical upward load. No angle input is needed.")
                 else:
-                    angle = st.number_input(
-                        f"Custom angle θ{i+1} (degrees from +x)",
-                        min_value=-360.0, max_value=360.0, value=240.0, step=5.0,
-                        key=f"multi_angle_{i}"
+                    angle_deg = st.number_input(
+                        f"Inclination angle θ{i+1} (0°–180° from +x)",
+                        min_value=0.0, max_value=180.0, value=60.0, step=5.0,
+                        key=f"multi_angle_{i}",
+                        help="0° points right, 90° is vertical, and 180° points left. The selected inclined-upward/downward option sets the vertical direction."
                     )
-                    st.caption("Angle convention: 0° → right, 90° ↑ up, 180° ← left, 270° / −90° ↓ down. Enter any angle from −360° to 360°.")
+                    # Keep the angle field within 0..180. The load type controls
+                    # the sign of the vertical component, while cos(theta) gives
+                    # the left/right horizontal component.
+                    vertical_sign = 1.0 if load_direction == "Inclined upward" else -1.0
+                    angle = float(angle_deg) if vertical_sign > 0 else -float(angle_deg)
+                    # Use the selected angle's horizontal projection and the
+                    # selected upward/downward vertical sense.
+                    fx = float(p_mag) * float(np.cos(np.radians(float(angle_deg))))
+                    fy = vertical_sign * float(p_mag) * float(np.sin(np.radians(float(angle_deg))) )
+                    st.caption("Angle guide: 0° → right, 90° ↑/↓, 180° ←. The load type determines whether the inclined arrow points upward or downward.")
 
-                fx = float(p_mag) * float(np.cos(np.radians(angle)))
-                fy = float(p_mag) * float(np.sin(np.radians(angle)))
-                st.caption(f"Resolved components: Fx = {fx:.3f} kN · Fy = {fy:.3f} kN ({'upward' if fy > 1e-9 else 'downward' if fy < -1e-9 else 'horizontal'})")
+                if load_direction in ("Downward", "Upward"):
+                    fx = 0.0
+                    fy = float(p_mag) if load_direction == "Upward" else -float(p_mag)
                 # Solver convention: positive p is downward; negative p is upward.
                 point_loads.append((-fy, float(x)))
-                point_load_details.append({"P": float(p_mag), "angle": float(angle), "Fx": fx, "Fy": fy, "x": float(x), "direction_choice": load_direction})
+                resolved_angle = float(np.degrees(np.arctan2(fy, fx))) if (abs(fx) + abs(fy)) > 1e-12 else 0.0
+                st.caption(f"Resolved components: Fx = {fx:.3f} kN · Fy = {fy:.3f} kN ({'upward' if fy > 1e-9 else 'downward' if fy < -1e-9 else 'horizontal'})")
+                point_load_details.append({"P": float(p_mag), "angle": resolved_angle, "input_angle": (float(angle_deg) if load_direction in ("Inclined upward", "Inclined downward") else None), "Fx": fx, "Fy": fy, "x": float(x), "direction_choice": load_direction})
 
         st.markdown("**5. Distributed Loads**")
         st.caption("Choose a load shape and position range. You can add multiple distributed loads, including loads that overlap or stack on the same beam region.")
@@ -1125,15 +1137,15 @@ elif st.session_state.page == "Simulator":
                 for i, detail in enumerate(point_load_details):
                     p_mag, angle_deg, x = detail["P"], detail["angle"], detail["x"]
                     if p_mag > 1e-10:
-                        theta = np.radians(angle_deg)
-                        dx, dy = np.cos(theta), np.sin(theta)
+                        component_norm = max((detail["Fx"]**2 + detail["Fy"]**2) ** 0.5, 1e-12)
+                        dx, dy = detail["Fx"] / component_norm, detail["Fy"] / component_norm
                         arrow_len = 0.82
                         tail = (x, .08)
                         head = (x + arrow_len*dx, .08 + arrow_len*dy)
                         color = "#e13b32" if detail["Fy"] < -1e-9 else "#07833b"
                         ax.annotate("", xy=head, xytext=tail,
                                     arrowprops=dict(arrowstyle="-|>", color=color, lw=2.2), zorder=9)
-                        add_diagram_label(x, f"{p_mag:g} kN @ {angle_deg:g}°", color)
+                        add_diagram_label(x, f"{p_mag:g} kN" + (f" @ {detail['input_angle']:g}°" if detail.get("input_angle") is not None else ""), color)
                 profile_max_intensity = max(
                     [float(np.max(distributed_intensity(load, np.linspace(load["a"], load["b"], 25))))
                      for load in distributed_loads if load["b"] > load["a"]] or [1.0]
@@ -1256,7 +1268,7 @@ elif st.session_state.page == "Simulator":
                 csv_writer.writerow(["Point Loads"])
                 csv_writer.writerow(["Load", "Magnitude (kN)", "Angle from +x (deg)", "Fx (kN)", "Fy (kN)", "Position x (m)"])
                 for idx, load in enumerate(point_load_details, start=1):
-                    csv_writer.writerow([idx, load["P"], load["angle"], load["Fx"], load["Fy"], load["x"]])
+                    csv_writer.writerow([idx, load["P"], (load.get("input_angle") if load.get("input_angle") is not None else load["angle"]), load["Fx"], load["Fy"], load["x"]])
                 csv_writer.writerow([])
                 csv_writer.writerow(["Distributed Loads"])
                 csv_writer.writerow(["Load", "Shape", "Start x (m)", "End x (m)", "Peak intensity (kN/m)", "Direction"])
